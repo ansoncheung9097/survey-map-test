@@ -6,28 +6,32 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="SurveyMap">
-    
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="theme-color" content="#000000">
     <link rel="apple-touch-icon" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png">
+    
     <title>Survey Map App</title>
     
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+    
     <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js"></script>
+
+    <link rel="stylesheet" href="https://unpkg.com/@raruto/leaflet-rotate@0.3.1/dist/leaflet-rotate.css" />
+    <script src="https://unpkg.com/@raruto/leaflet-rotate@0.3.1/dist/leaflet-rotate.js"></script>
 
     <style>
         body { 
             margin: 0;
             padding: 0; 
             display: flex; 
-            /* 關鍵修改：使用 dvh (動態視口高度) 來避開手機網址列 */
+            /* 使用 dvh 避開手機網址列 */
             height: 100dvh; 
             font-family: -apple-system, Arial, sans-serif; 
             overflow: hidden; 
             background: #f0f2f5; 
             flex-direction: column; 
-            /* 關鍵修改：避開 iPhone 的瀏海和底部橫條 */
+            /* 避開 iPhone 瀏海與底部橫條 */
             padding-top: env(safe-area-inset-top);
             padding-bottom: env(safe-area-inset-bottom);
         }
@@ -320,11 +324,20 @@
 
         function initMap(data) {
             if(map) map.remove();
-           map = L.map('map', {
+            
+            // [新增] 地圖設定，啟用旋轉
+            map = L.map('map', {
                zoomControl: false,
                zoomSnap: 0.1,         
                zoomDelta: 0.5,      
-               wheelPxPerZoomLevel: 120 
+               wheelPxPerZoomLevel: 120,
+               // 允許旋轉
+               rotate: true,
+               touchRotate: true,
+               rotateControl: {
+                   closeOnZeroBearing: false,
+                   position: 'topright'
+               }
            });
             
             var osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 });
@@ -862,5 +875,4 @@
         }
     </script>
 </body>
-
 </html>
