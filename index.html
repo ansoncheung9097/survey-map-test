@@ -52,7 +52,7 @@
         .app-title { color:white; font-size:24px; font-weight:bold; margin:30px 0 10px 0; }
         .app-subtitle { color:rgba(255,255,255,0.8); font-size:14px; margin-bottom:30px; }
         
-        /* Updated Menu Layout for Folders */
+        /* Updated Menu Layout */
         .menu-section { width: 100%; max-width: 500px; margin-bottom: 20px; }
         .menu-header { color: white; font-size: 16px; font-weight: bold; border-bottom: 1px solid rgba(255,255,255,0.3); padding-bottom: 5px; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px; }
         .menu-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 100%; }
@@ -69,7 +69,7 @@
 
         #setup-box { display:none; background:white; padding:20px; border-radius:10px; text-align:center; width:80%; max-width:300px; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); z-index:9999; box-shadow:0 10px 30px rgba(0,0,0,0.3); }
 
-        /* Floating Buttons (Collapsible) - Top Left */
+        /* Floating Buttons */
         .btn-group-container { position:absolute; top:10px; left:10px; z-index:3000; display:flex; flex-direction:column; gap:10px; }
         .btn-expandable { display: none; flex-direction: column; gap: 10px; }
         .btn-expandable.show { display: flex; animation: fadeIn 0.3s; }
@@ -219,10 +219,8 @@
             <h3 style="margin-top:0" id="modal-title">Update Install Date</h3>
             <div id="modal-subtitle" style="font-size:13px;color:#ccc;margin-bottom:15px"></div>
             
-            <div id="modal-date-container">
-                <label style="font-size:12px;color:#ccc;">Install Date</label>
-                <input type="date" id="install-date-picker" class="modal-input">
-            </div>
+            <label id="date-label" style="font-size:12px;color:#ccc;">Select Date</label>
+            <input type="date" id="install-date-picker" class="modal-input">
 
             <div style="margin-top:20px; text-align:right;">
                 <button onclick="closeModal()" style="padding:8px 15px; background:#555; color:white; border:none; border-radius:5px;">Cancel</button>
@@ -334,7 +332,7 @@
         var userMarker = null; 
         
         var zoneLayerGroup = L.layerGroup();
-        var showZones = false; // Point 2: Default OFF
+        var showZones = false; // Default OFF
         
         // Default Colors (Instrumentation)
         var colorNotInstalled = '#FF0000';
@@ -361,10 +359,11 @@
         function saveURL() { var input = document.getElementById('url-input').value.trim(); if(input) { localStorage.setItem("bsm_api_url", input); API_URL = input; document.getElementById('setup-box').style.display = 'none'; document.getElementById('loading-overlay').style.display = 'flex'; fetchSheetNames(); } }
         function resetURL() { localStorage.removeItem("bsm_api_url"); localStorage.removeItem("bsm_last_sheet"); localStorage.removeItem("bsm_map_center"); localStorage.removeItem("bsm_map_zoom"); location.reload(); }
 
-        // --- Fetch & Display Sheet Names with Clean UI (Point 1) ---
+        // --- Fetch & Display Sheet Names with Clean UI (Hide I_ & M_) ---
         function fetchSheetNames() {
             fetch(API_URL, {method: 'POST', body: JSON.stringify({action: 'get_sheet_names'})})
-            .then(res => res.json()).then(names => {
+            .then(res => res.json())
+            .then(names => {
                 var gridInstr = document.getElementById('grid-instr');
                 var gridMon = document.getElementById('grid-mon');
                 var secInstr = document.getElementById('section-instr');
@@ -373,7 +372,8 @@
                 gridInstr.innerHTML = ""; gridMon.innerHTML = "";
                 
                 if(names.length === 0) { alert("No sheets found!"); return; }
-                
+                if(names.result === "Error") { alert("Script Error: " + names.message); return; }
+
                 var hasInstr = false, hasMon = false;
 
                 names.forEach(name => {
@@ -403,7 +403,11 @@
                 
                 var lastSheet = localStorage.getItem("bsm_last_sheet");
                 if (lastSheet && names.includes(lastSheet)) { loadProject(lastSheet, true); }
-            }).catch(err => { document.getElementById('loading-overlay').style.display = 'none'; alert("Connection Failed!"); document.getElementById('setup-box').style.display = 'block'; });
+            }).catch(err => { 
+                document.getElementById('loading-overlay').style.display = 'none'; 
+                alert("Connection Failed! Please check if deployment access is set to 'Anyone'."); 
+                document.getElementById('setup-box').style.display = 'block'; 
+            });
         }
 
         function loadProject(sheetName, isRestoring) {
@@ -424,7 +428,7 @@
             batchMode = false; measureMode = false; showZones = false; // Reset States
             updateBatchUI(); toggleMeasure(false);
             
-            // Explicitly remove active classes just in case
+            // Explicitly remove active classes
             document.getElementById('zone-btn').classList.remove('active');
             document.getElementById('measure-btn').classList.remove('active');
             
@@ -569,9 +573,6 @@
                     if (measureMode) { e.target.closePopup(); addMeasurePoint(e.latlng); } 
                     else if (batchMode) { 
                         e.target.closePopup(); 
-                        // Logic Update: In M mode, we can select any point that isn't DONE for today?
-                        // Or just select ANY point. Let's allow any selection in Batch Mode for now.
-                        // Point 3 says batch updates "v".
                         toggleBatchSelection(p.id); 
                     } 
                     else { var currentM = markers.find(x => x.id === String(p.id)); if(currentM) e.target.setPopupContent(generatePopupHtml(currentM)); }
@@ -599,8 +600,6 @@
             applyFilter();
             
             // Point 2: Ensure OFF by default (don't call drawZoneBoundaries here automatically)
-            // But we might want to prep the data.
-            // drawZoneBoundaries() is called by the toggle.
         }
 
         // --- Legend Update ---
@@ -745,7 +744,6 @@
                 var searchMatch = m.id.toUpperCase().includes(s);
                 var isControl = controlTypes.has(m.type);
                 if (isControl && !currentSheet.startsWith("M_")) { 
-                    // I_ Mode Control Logic
                     var typeSelected = st.includes("Control Point") || st.includes(m.type); if (typeSelected && searchMatch) { map.addLayer(m.layer); v.push(m); return; } 
                 }
                 if (isControl && !currentSheet.startsWith("M_")) { map.removeLayer(m.layer); return; }
@@ -761,7 +759,7 @@
         function toggleBatchSelection(id) { var m = markers.find(x => x.id === id); if (!m) return; if (batchSelection.has(id)) { batchSelection.delete(id); if (m.layer.setStyle) { m.layer.setStyle({ fillColor: m.color, color: (m.id === m.zone ? 'white':'white'), weight: 2 }); } } else { batchSelection.add(id); if (m.layer.setStyle) { m.layer.setStyle({ fillColor: '#ffc107', color: 'black', weight: 4 }); } } document.getElementById('batch-count').innerText = batchSelection.size; }
         function clearBatchSelection() { batchSelection.forEach(id => { var m = markers.find(x => x.id === id); if (m && m.layer.setStyle) m.layer.setStyle({ fillColor: m.color, color: 'white', weight: 2 }); }); batchSelection.clear(); document.getElementById('batch-count').innerText = 0; }
         
-        // Point 3: Batch Mode Logic Branching
+        // Point 3: Batch Mode Logic (Modified)
         function openBatchInstallModal() { 
             if (batchSelection.size === 0) return; 
             isBatchInstall = true; 
@@ -770,28 +768,33 @@
             document.getElementById('modal-title').innerText = isMon ? "Confirm Update" : "Batch Install";
             document.getElementById('modal-subtitle').innerText = batchSelection.size + " selected points";
             
-            // Toggle Date Picker Visibility
-            var dateContainer = document.getElementById('modal-date-container');
+            var dateContainer = document.getElementById('install-date-picker');
+            var dateLabel = document.getElementById('date-label');
             var saveBtn = document.getElementById('modal-save-btn');
             
+            var today = new Date().toISOString().split('T')[0]; 
+            dateContainer.value = today; 
+            
             if (isMon) {
-                dateContainer.style.display = 'none';
-                saveBtn.innerText = "Mark as Done (v)";
+                dateLabel.innerText = "Select Date to Mark 'v'";
+                saveBtn.innerText = "Update Record (v)";
                 saveBtn.onclick = saveBatchMonitoring;
             } else {
-                dateContainer.style.display = 'block';
+                dateLabel.innerText = "Install Date";
                 saveBtn.innerText = "Save";
                 saveBtn.onclick = saveInstall;
-                var today = new Date().toISOString().split('T')[0]; 
-                document.getElementById('install-date-picker').value = today; 
             }
             
             document.getElementById('update-modal-overlay').style.display = 'flex'; 
         }
 
         function saveBatchMonitoring() {
+             var dateInput = document.getElementById('install-date-picker').value;
+             if(!dateInput) { alert("Please select a date"); return; }
+             
              document.getElementById('loading-overlay').style.display = 'flex';
              var ids = Array.from(batchSelection);
+             
              // Optimistic UI Update
              ids.forEach(id => {
                  var m = markers.find(x=>x.id===id);
@@ -804,7 +807,7 @@
              renderList(markers);
              
              fetch(API_URL, {
-                method: 'POST', body: JSON.stringify({action: 'batch_update_monitoring', sheet: currentSheet, ids: ids})
+                method: 'POST', body: JSON.stringify({action: 'batch_update_monitoring', sheet: currentSheet, ids: ids, date: dateInput})
              }).then(res => res.text()).then(txt => {
                  alert(txt); toggleBatchMode(); reloadMap(); 
              }).catch(err => { alert("Error"); document.getElementById('loading-overlay').style.display = 'none'; });
@@ -827,7 +830,7 @@
         function updateGPSBoxContent(lat, lon, acc) { var box = document.getElementById('gps-coords-box'); var content = ""; if (lat !== undefined && lon !== undefined) { try { if (typeof proj4 !== 'undefined') { var result = proj4("EPSG:4326", "EPSG:2326", [lon, lat]); content += `N: ${result[1].toFixed(3)} | E: ${result[0].toFixed(3)}`; if(acc) content += ` <br><small>精度: ±${Math.round(acc)}m</small>`; } else { content += `Lat: ${lat.toFixed(5)} | Lon: ${lon.toFixed(5)}`; } } catch(e) { content += `Lat: ${lat.toFixed(5)} | Lon: ${lon.toFixed(5)}`; } box.setAttribute('data-last-pos', content); } else { content = box.getAttribute('data-last-pos') || "Waiting..."; } if (currentHeading !== null && !isNaN(currentHeading)) { var h = currentHeading; var dirStr = ""; if (h >= 337.5 || h < 22.5) dirStr = "N"; else if (h >= 22.5 && h < 67.5) dirStr = "NE"; else if (h >= 67.5 && h < 112.5) dirStr = "E"; else if (h >= 112.5 && h < 157.5) dirStr = "SE"; else if (h >= 157.5 && h < 202.5) dirStr = "S"; else if (h >= 202.5 && h < 247.5) dirStr = "SW"; else if (h >= 247.5 && h < 292.5) dirStr = "W"; else if (h >= 292.5 && h < 337.5) dirStr = "NW"; content += ` | ⬆ ${Math.round(h)}° (${dirStr})`; } box.innerHTML = content; }
         function toggleGPS() { var gpsBtn = document.getElementById('gps-btn'); var gpsBox = document.getElementById('gps-coords-box'); if (!gpsActive) { if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') { DeviceOrientationEvent.requestPermission().then(resp => { if(resp=='granted'){} }).catch(console.error); } if ("geolocation" in navigator) { gpsBtn.classList.add('active'); gpsBox.style.display = 'block'; gpsBox.innerHTML = "正在獲取衛星訊號..."; gpsActive = true; gpsWatchId = navigator.geolocation.watchPosition( function(position) { var lat = position.coords.latitude; var lon = position.coords.longitude; var acc = position.coords.accuracy; var latlng = [lat, lon]; if (!userMarker) { var beamIcon = L.divIcon({ className: 'user-location-marker', html: '<div class="location-beam"></div><div class="location-dot"></div>', iconSize: [40, 40], iconAnchor: [20, 20] }); userMarker = L.marker(latlng, {icon: beamIcon, zIndexOffset: 1000}).addTo(map); } else { userMarker.setLatLng(latlng); } map.setView(latlng); updateGPSBoxContent(lat, lon, acc); }, function(error) { gpsBox.innerHTML = "GPS Error: " + error.message; }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 } ); } else { alert("瀏覽器不支持 GPS"); } } else { if(gpsWatchId !== null) navigator.geolocation.clearWatch(gpsWatchId); gpsWatchId = null; gpsBtn.classList.remove('active'); gpsBox.style.display = 'none'; gpsActive = false; if(userMarker) map.removeLayer(userMarker); userMarker = null; } }
 
-        function openInstallModal(id) { isBatchInstall = false; currentEditingId = id; document.getElementById('modal-title').innerText = "Update Install Date"; document.getElementById('modal-subtitle').innerText = id; document.getElementById('modal-date-container').style.display='block'; var saveBtn=document.getElementById('modal-save-btn'); saveBtn.innerText='Save'; saveBtn.onclick=saveInstall; var today = new Date().toISOString().split('T')[0]; document.getElementById('install-date-picker').value = today; document.getElementById('update-modal-overlay').style.display = 'flex'; }
+        function openInstallModal(id) { isBatchInstall = false; currentEditingId = id; document.getElementById('modal-title').innerText = "Update Install Date"; document.getElementById('modal-subtitle').innerText = id; document.getElementById('date-label').innerText="Install Date"; var saveBtn=document.getElementById('modal-save-btn'); saveBtn.innerText='Save'; saveBtn.onclick=saveInstall; var today = new Date().toISOString().split('T')[0]; document.getElementById('install-date-picker').value = today; document.getElementById('update-modal-overlay').style.display = 'flex'; }
         function closeModal() { document.getElementById('update-modal-overlay').style.display = 'none'; currentEditingId = null; isBatchInstall = false; }
         function saveInstall() { var d = document.getElementById('install-date-picker').value; if(!d) { alert("Please select date"); return; } if (isBatchInstall) { submitBatchInstallData(d); } else { if(!currentEditingId) return; updateStatus(currentEditingId, d); } closeModal(); }
         function updateStatus(id, dateStr) { var m = markers.find(x => x.id === id); if(m) { m.status = "Installed"; m.color = colorInstalled; m.installDate = dateStr; if(m.layer.setStyle) m.layer.setStyle({fillColor: colorInstalled}); updatePopupContent(m); } fetch(API_URL, {method:'POST', body:JSON.stringify({action:'update', sheet:currentSheet, id:id, status:1, date:dateStr})}).catch(err => alert("Update Error (Background)")); }
@@ -844,7 +847,6 @@
             if (m.isControl) { content += `<div style="margin-top:5px;font-weight:bold;color:#333;">RL: ${m.rl || '-'}</div>`; return content; }
             
             var btnHtml = "";
-            
             if(m.isDamaged) {
                  btnHtml = `<button onclick="toggleDamaged('${m.id}', false)" style="width:100%;background:#28a745;color:white;border:none;padding:8px;border-radius:4px;cursor:pointer;margin-top:10px;">Reinstate (Fix)</button>`;
             } else if (!currentSheet.startsWith("M_")) {
