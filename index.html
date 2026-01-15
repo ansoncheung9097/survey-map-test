@@ -32,6 +32,33 @@
             border: 1px solid rgba(255,255,255,0.2); pointer-events: none; text-align: center;
         }
 
+        /* Compass / Reset Rotation Button */
+        #compass-btn {
+            position: absolute; top: 90px; right: 15px; z-index: 3000;
+            width: 40px; height: 40px; background: white;
+            border-radius: 50%; box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            display: none; justify-content: center; align-items: center;
+            cursor: pointer; transition: opacity 0.3s;
+            border: 1px solid #ddd;
+        }
+        /* The Compass Needle */
+        .compass-arrow-container {
+            width: 100%; height: 100%; display: flex; justify-content: center; align-items: center;
+            transition: transform 0.1s linear; /* Smooth rotation */
+        }
+        .compass-n {
+            width: 0; height: 0;
+            border-left: 5px solid transparent; border-right: 5px solid transparent;
+            border-bottom: 16px solid #ff3b30; /* Red North */
+            position: absolute; top: 4px;
+        }
+        .compass-s {
+            width: 0; height: 0;
+            border-left: 5px solid transparent; border-right: 5px solid transparent;
+            border-top: 16px solid #8e8e93; /* Grey South */
+            position: absolute; bottom: 4px;
+        }
+
         /* User Location Marker */
         .user-location-marker {
             position: relative; width: 40px; height: 40px;
@@ -441,6 +468,14 @@
     </div>
 
     <div id="map-container">
+        <!-- Compass Reset Button -->
+        <div id="compass-btn" onclick="resetNorth()">
+            <div class="compass-arrow-container">
+                <div class="compass-n"></div>
+                <div class="compass-s"></div>
+            </div>
+        </div>
+
         <div id="gps-coords-box">Waiting for GPS...</div> 
         
         <div id="measure-box">
@@ -669,9 +704,7 @@
                     <div class="legend-icon"><span class="legend-dot" style="background:#00e600;"></span></div>
                     <div class="legend-text">Installed</div>
                     
-                    <div class="legend-icon"><span class="legend-dot" style="background:#fd7e14;"></span></div>
-                    <div class="legend-text">Monitoring</div>
-
+                    <div class="legend-separator"></div>
                     <div class="legend-icon"><span style="color:red;font-weight:900;font-size:12px;">✖&#xFE0E;</span></div>
                     <div class="legend-text">Damaged</div>
                     
@@ -718,6 +751,19 @@
             L.control.layers({"Standard": osmLayer, "Satellite": satLayer}).addTo(map);
             L.control.zoom({position: 'bottomright'}).addTo(map);
             
+            // Map Rotate Event for Compass
+            map.on('rotate', function() {
+                var bearing = map.getBearing();
+                var btn = document.getElementById('compass-btn');
+                var arrow = document.querySelector('.compass-arrow-container');
+                if (Math.abs(bearing) > 0.5) { // Threshold
+                    btn.style.display = 'flex';
+                    arrow.style.transform = `rotate(${-bearing}deg)`;
+                } else {
+                    btn.style.display = 'none';
+                }
+            });
+
             // NOTE: Layers are NOT added by default as requested (Zone/Measure)
             
             map.on('moveend', function() {
@@ -743,9 +789,26 @@
             var todayStr = year + '-' + month + '-' + day;
             
             data.forEach(p => {
+                // Calculate dates for filter logic
+                var hasInstallDate = (p.d && p.d.trim() !== "" && p.d !== "-");
+                var hasInitDate = (p.init && p.init.trim() !== "" && p.init !== "-");
+                var visibleInM = true;
+
+                // M_ Mode Filter: Hide points without Install AND Initial date
+                if (isMonitoringMode) {
+                    if (!hasInstallDate && !hasInitDate) visibleInM = false; 
+                }
+
+                // Filter logic prep - Always add to Zone set
                 uZones.add(p.z || "Other");
+                
+                // Type Logic
                 if (controlTypes.has(p.t)) uTypes.add("Control Point"); else uTypes.add(p.t || "Other");
-                if (p.freq) uFreq.add(p.freq);
+                
+                // Frequency Filter Logic: Don't add "None" for M_ mode
+                if (p.freq && p.freq !== "None") {
+                    uFreq.add(p.freq);
+                }
                 
                 var finalN, finalE, isAsBuilt = false;
                 if (p.an && p.ae && !isNaN(p.an) && !isNaN(p.ae)) { finalN = p.an; finalE = p.ae; isAsBuilt = true; }
@@ -807,16 +870,17 @@
                         }
                     }
                 } 
-                // --- EXISTING LOGIC FOR I_ SHEETS ---
+                // --- SIMPLIFIED LOGIC FOR I_ SHEETS ---
                 else {
-                    var hasInstallDate = (p.d && p.d.trim() !== "");
-                    var hasInitDate = (p.init && p.init.trim() !== "");
-                    
+                    // Already calculated hasInstallDate above
+                    // var hasInitDate = (p.init && p.init.trim() !== ""); // REMOVED
+
                     if (isDamaged) { statusStr = "Damaged"; color = "red"; }
                     else if (isControl) { statusStr = "Control"; color = "#FF0000"; }
                     else {
-                        if (hasInitDate) { color = colorMonitoring; statusStr = "Monitoring"; }
-                        else if (hasInstallDate) { color = colorInstalled; statusStr = "Installed"; }
+                        // Removed Monitoring Status
+                        if (hasInstallDate) { color = colorInstalled; statusStr = "Installed"; }
+                        // Else stays Red (Not Installed)
                     }
                 }
                 
@@ -845,8 +909,15 @@
                         addMeasurePoint(e.latlng);
                     } else if (batchMode) {
                         e.target.closePopup();
-                        if (statusStr !== "Done" && statusStr !== "Damaged") { 
-                             toggleBatchSelection(p.id);
+                        // I_ Mode Batch Restriction: Only select 'Not Installed'
+                        if (isMonitoringMode) {
+                            // M Mode logic handled by modal, but if map click was possible:
+                            if (statusStr !== "Done" && statusStr !== "Damaged") toggleBatchSelection(p.id);
+                        } else {
+                            // I Mode Logic
+                            if (statusStr === "Not Installed") { 
+                                toggleBatchSelection(p.id);
+                            }
                         }
                     } else {
                         var currentM = markers.find(x => x.id === String(p.id));
@@ -869,7 +940,8 @@
                     installDate: p.d || '-', initDate: p.init || '-', 
                     code: p.code, rl: p.rl, lat: lat, lng: lng, n: finalN, e: finalE, isAsBuilt: isAsBuilt,
                     remark: p.rmk || "",
-                    freq: p.freq || "None"
+                    freq: p.freq || "None",
+                    hasValidDate: visibleInM
                 });
             });
 
@@ -884,6 +956,11 @@
             setupMultiFilters(uZones, uTypes, uFreq);
             applyFilter();
             // Don't draw Zones by default
+        }
+
+        // --- Compass Reset ---
+        function resetNorth() {
+            if(map) map.setBearing(0);
         }
 
         // --- Convex Hull & Zone Boundary Logic ---
@@ -1027,16 +1104,27 @@
         function toggleDropdown(t) { var el = document.getElementById(t+'-dropdown'); document.querySelectorAll('.dropdown-check-list').forEach(d => { if(d!==el) d.classList.remove('visible'); }); el.classList.toggle('visible'); }
         
         function setupMultiFilters(z, t, f) { 
+            // Feature 2: Remove OTHER from I_ mode AND M_ mode ZONE filter (Always Remove)
+            z.delete("Other");
+            
             populate(z, 'zone', 'Zone'); 
             populate(t, 'type', 'Type'); 
-            populate(f, 'freq', 'Freq');
+            
+            // Branch: Hide FREQ filter in I_ mode
+            var freqEl = document.getElementById('freq-dropdown');
+            if (isMonitoringMode) {
+                freqEl.style.display = 'block';
+                populate(f, 'freq', 'Freq');
+            } else {
+                freqEl.style.display = 'none';
+            }
             
             // Dynamic Status List
             var sSet;
             if (isMonitoringMode) {
                  sSet = new Set(['Missing', 'Partial', 'Done', 'Damaged']);
             } else {
-                 sSet = new Set(['Not Installed', 'Installed', 'Monitoring', 'Damaged']); 
+                 sSet = new Set(['Not Installed', 'Installed', 'Damaged']); 
             }
             populate(sSet, 'status', 'Status'); 
         }
@@ -1083,15 +1171,34 @@
             markers.forEach(m => {
                 var searchMatch = m.id.toUpperCase().includes(s);
                 var isControl = controlTypes.has(m.type);
-                if (isControl) {
-                    var typeSelected = st.includes("Control Point") || st.includes(m.type);
-                    if (typeSelected && searchMatch) { map.addLayer(m.layer); v.push(m); return; }
-                }
-                if (isControl) { map.removeLayer(m.layer); return; }
                 
+                // --- Priority 1: Control Point Logic (M_ Mode or General) ---
+                if (isControl) {
+                    // Control Points only respect TYPE Filter & Search
+                    var typeSelected = st.includes("Control Point") || st.includes(m.type);
+                    
+                    if (typeSelected && searchMatch) { 
+                        map.addLayer(m.layer); 
+                        v.push(m); 
+                    } else {
+                        map.removeLayer(m.layer); 
+                    }
+                    // IMPORTANT: Return early so no other filters apply to Control Points
+                    return; 
+                }
+
+                // --- Priority 2: M_ Mode Visibility Logic ---
+                // Hide non-control points without valid dates
+                if (isMonitoringMode && !m.hasValidDate) {
+                    map.removeLayer(m.layer);
+                    return; 
+                }
+
+                // --- Priority 3: Standard Filtering ---
                 var typeMatch = st.includes(m.type);
                 var zoneMatch = sz.includes(m.zone);
-                var freqMatch = sf.includes(m.freq);
+                // FREQ Filter Check: If in I_ mode (freq hidden), ignore freq filter
+                var freqMatch = isMonitoringMode ? sf.includes(m.freq) : true;
                 var statusMatch = ss.includes(m.status);
 
                 if (typeMatch && zoneMatch && statusMatch && freqMatch && searchMatch) { map.addLayer(m.layer); v.push(m); } 
