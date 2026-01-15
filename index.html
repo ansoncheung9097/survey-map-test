@@ -855,13 +855,13 @@
                                  todayIndex = p.mDates.indexOf(todayStr);
                              }
                              if (todayIndex > -1 && checks[todayIndex] === 'v') {
-                                 statusStr = "Done"; color = "green";
+                                 statusStr = "Done"; color = "#00e600";
                              } else {
                                  statusStr = "Missing"; color = "red";
                              }
                         } else if (freq === 'Twice a week') {
                             if (checkCount >= 2) {
-                                statusStr = "Done"; color = "green";
+                                statusStr = "Done"; color = "#00e600";
                             } else if (checkCount === 1) {
                                 statusStr = "Partial"; color = "#fd7e14"; 
                             } else {
@@ -869,7 +869,7 @@
                             }
                         } else if (freq === 'Weekly') {
                              if (checkCount >= 1) {
-                                statusStr = "Done"; color = "green";
+                                statusStr = "Done"; color = "#00e600";
                             } else {
                                 statusStr = "Missing"; color = "red";
                             }
@@ -1603,4 +1603,5 @@
     </script>
 </body>
 </html>
+
 
