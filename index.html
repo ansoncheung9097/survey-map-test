@@ -193,12 +193,12 @@
         
         <div id="menu-container" style="width:100%; display:flex; flex-direction:column; align-items:center;">
              <div class="menu-section" id="section-instr" style="display:none;">
-                 <div class="menu-header">📂 Instrumentation (I_)</div>
+                 <div class="menu-header">📂 INSTRUMENTATION</div>
                  <div class="menu-grid" id="grid-instr"></div>
              </div>
              
              <div class="menu-section" id="section-mon" style="display:none;">
-                 <div class="menu-header" style="color:#ffc107;">📊 Monitoring Record (M_)</div>
+                 <div class="menu-header" style="color:#ffc107;">📊 MONITORING RECORD</div>
                  <div class="menu-grid" id="grid-mon"></div>
              </div>
         </div>
@@ -218,11 +218,15 @@
         <div class="modal-box">
             <h3 style="margin-top:0" id="modal-title">Update Install Date</h3>
             <div id="modal-subtitle" style="font-size:13px;color:#ccc;margin-bottom:15px"></div>
-            <label style="font-size:12px;color:#ccc;">Install Date</label>
-            <input type="date" id="install-date-picker" class="modal-input">
+            
+            <div id="modal-date-container">
+                <label style="font-size:12px;color:#ccc;">Install Date</label>
+                <input type="date" id="install-date-picker" class="modal-input">
+            </div>
+
             <div style="margin-top:20px; text-align:right;">
                 <button onclick="closeModal()" style="padding:8px 15px; background:#555; color:white; border:none; border-radius:5px;">Cancel</button>
-                <button onclick="saveInstall()" style="padding:8px 15px; background:#0044cc; color:white; border:none; border-radius:5px;">Save</button>
+                <button id="modal-save-btn" onclick="saveInstall()" style="padding:8px 15px; background:#0044cc; color:white; border:none; border-radius:5px;">Save</button>
             </div>
         </div>
     </div>
@@ -330,7 +334,7 @@
         var userMarker = null; 
         
         var zoneLayerGroup = L.layerGroup();
-        var showZones = false;
+        var showZones = false; // Point 2: Default OFF
         
         // Default Colors (Instrumentation)
         var colorNotInstalled = '#FF0000';
@@ -357,7 +361,7 @@
         function saveURL() { var input = document.getElementById('url-input').value.trim(); if(input) { localStorage.setItem("bsm_api_url", input); API_URL = input; document.getElementById('setup-box').style.display = 'none'; document.getElementById('loading-overlay').style.display = 'flex'; fetchSheetNames(); } }
         function resetURL() { localStorage.removeItem("bsm_api_url"); localStorage.removeItem("bsm_last_sheet"); localStorage.removeItem("bsm_map_center"); localStorage.removeItem("bsm_map_zoom"); location.reload(); }
 
-        // --- UPDATED: Fetch & Display Sheet Names in Folders ---
+        // --- Fetch & Display Sheet Names with Clean UI (Point 1) ---
         function fetchSheetNames() {
             fetch(API_URL, {method: 'POST', body: JSON.stringify({action: 'get_sheet_names'})})
             .then(res => res.json()).then(names => {
@@ -378,14 +382,16 @@
                     btn.onclick = function() { loadProject(name); };
                     
                     if (name.startsWith("M_")) {
-                        // Monitoring Folder
                         hasMon = true;
-                        btn.innerHTML = `<span class="menu-icon" style="color:#ffc107;">📊</span><span class="menu-text">${name}</span>`;
+                        // Strip "M_" for display
+                        var displayName = name.replace(/^M_/, '');
+                        btn.innerHTML = `<span class="menu-icon" style="color:#ffc107;">📊</span><span class="menu-text">${displayName}</span>`;
                         gridMon.appendChild(btn);
                     } else {
-                        // Default / Instrumentation Folder
                         hasInstr = true;
-                        btn.innerHTML = `<span class="menu-icon" style="color:#007bff;">📁</span><span class="menu-text">${name}</span>`;
+                        // Strip "I_" for display
+                        var displayName = name.replace(/^I_/, '');
+                        btn.innerHTML = `<span class="menu-icon" style="color:#007bff;">📁</span><span class="menu-text">${displayName}</span>`;
                         gridInstr.appendChild(btn);
                     }
                 });
@@ -415,8 +421,13 @@
         function goHome() { 
             document.getElementById('map-container').style.display = 'none';
             document.getElementById('home-screen').style.display = 'flex'; 
-            batchMode = false; measureMode = false; 
+            batchMode = false; measureMode = false; showZones = false; // Reset States
             updateBatchUI(); toggleMeasure(false);
+            
+            // Explicitly remove active classes just in case
+            document.getElementById('zone-btn').classList.remove('active');
+            document.getElementById('measure-btn').classList.remove('active');
+            
             if(gpsActive) toggleGPS();
             localStorage.removeItem("bsm_last_sheet");
         }
@@ -427,7 +438,6 @@
             var icon = document.querySelector('.btn-main-toggle'); icon.innerHTML = el.classList.contains('show') ? '✖' : '⚙️';
         }
 
-        // --- Helper to parse date headers ---
         function parseDateHeader(raw) {
             if(!raw) return null;
             var d = new Date(raw);
@@ -458,29 +468,20 @@
             var uZones = new Set(), uTypes = new Set(), uFreq = new Set();
             markers = [];
 
-            // --- DETERMINE MODE (I_ vs M_) ---
             var isMonitoringMode = currentSheet.startsWith("M_");
-            
-            // If Monitoring Mode, find the date headers row.
-            // Data passed from GAS is an array of objects.
-            // We need to identify which "object" represents row 2 (header).
-            // My GAS change added `rIdx` to identify row index. rIdx=1 is headers.
             
             var dateHeaders = [];
             var today = new Date();
             today.setHours(0,0,0,0);
 
             if (isMonitoringMode) {
-                // Find the header row (rIdx = 1)
                 var headerRowObj = data.find(d => d.rIdx === 1);
                 if (headerRowObj && headerRowObj.mData) {
-                    // P=index 0 in mData ... U=index 5
                     dateHeaders = headerRowObj.mData.map(raw => parseDateHeader(raw));
                 }
             }
 
             data.forEach(p => {
-                // Skip header row for plotting (usually Point ID is "Point ID" in header)
                 if (p.rIdx === 1 && isMonitoringMode) return; 
 
                 uZones.add(p.z || "Other");
@@ -505,22 +506,17 @@
                 var color, statusStr;
 
                 if (isMonitoringMode) {
-                    // --- M_ SHEET LOGIC ---
-                    // Default Red
                     color = monColorMissing; 
                     statusStr = "Missing";
                     
                     var vCount = 0;
                     var hasTodayV = false;
                     
-                    // Iterate through P-U data
                     if (p.mData) {
                         for(var i=0; i<p.mData.length; i++) {
                             var val = String(p.mData[i]).toLowerCase();
                             var isV = (val === 'v');
                             if(isV) vCount++;
-                            
-                            // Check if this column corresponds to Today
                             if (dateHeaders[i] && isSameDate(dateHeaders[i], today)) {
                                 if(isV) hasTodayV = true;
                             }
@@ -528,7 +524,6 @@
                     }
                     
                     var freq = String(p.freq).toLowerCase();
-                    
                     if (freq === "daily") {
                         if (hasTodayV) { color = monColorDone; statusStr = "Done"; }
                     } else if (freq === "weekly") {
@@ -537,13 +532,7 @@
                         if (vCount >= 2) { color = monColorDone; statusStr = "Done"; }
                         else if (vCount === 1) { color = monColorPartial; statusStr = "Partial"; }
                     }
-                    
-                    // Force Damaged override?
-                    // Usually damaged points are not monitored.
-                    // If damaged, keep Red? Or show Damaged icon.
-                    
                 } else {
-                    // --- I_ SHEET LOGIC (Standard) ---
                     var hasInstallDate = (p.d && p.d.trim() !== "");
                     var hasInitDate = (p.init && p.init.trim() !== "");
                     color = colorNotInstalled; 
@@ -578,7 +567,13 @@
 
                 marker.on('click', function(e) {
                     if (measureMode) { e.target.closePopup(); addMeasurePoint(e.latlng); } 
-                    else if (batchMode) { e.target.closePopup(); if(statusStr === "Not Installed") toggleBatchSelection(p.id); } 
+                    else if (batchMode) { 
+                        e.target.closePopup(); 
+                        // Logic Update: In M mode, we can select any point that isn't DONE for today?
+                        // Or just select ANY point. Let's allow any selection in Batch Mode for now.
+                        // Point 3 says batch updates "v".
+                        toggleBatchSelection(p.id); 
+                    } 
                     else { var currentM = markers.find(x => x.id === String(p.id)); if(currentM) e.target.setPopupContent(generatePopupHtml(currentM)); }
                 });
 
@@ -598,10 +593,14 @@
                 else { if(markers.length > 0) map.fitBounds(bounds.pad(0.1)); }
             } else { if(markers.length > 0) map.fitBounds(bounds.pad(0.1)); }
 
-            setupMultiFilters(uZones, uTypes, uFreq);
+            // Point 4: Custom Filter Status based on Mode
+            setupMultiFilters(uZones, uTypes, uFreq, isMonitoringMode);
             updateLegend(isMonitoringMode);
             applyFilter();
-            drawZoneBoundaries();
+            
+            // Point 2: Ensure OFF by default (don't call drawZoneBoundaries here automatically)
+            // But we might want to prep the data.
+            // drawZoneBoundaries() is called by the toggle.
         }
 
         // --- Legend Update ---
@@ -626,11 +625,39 @@
             }
         }
 
-        // --- Standard Logic Preserved ---
-        function toggleZoneBoundaries() { showZones = !showZones; var btn = document.getElementById('zone-btn'); if (showZones) { btn.classList.add('active'); map.addLayer(zoneLayerGroup); } else { btn.classList.remove('active'); map.removeLayer(zoneLayerGroup); } }
+        function toggleZoneBoundaries() { 
+            showZones = !showZones; 
+            var btn = document.getElementById('zone-btn'); 
+            if (showZones) { 
+                btn.classList.add('active'); 
+                drawZoneBoundaries(); // Calc and draw on demand
+                map.addLayer(zoneLayerGroup); 
+            } else { 
+                btn.classList.remove('active'); 
+                map.removeLayer(zoneLayerGroup); 
+            } 
+        }
+
         function getZoneColor(zoneStr) { var hash = 0; for (var i = 0; i < zoneStr.length; i++) hash = zoneStr.charCodeAt(i) + ((hash << 5) - hash); return distinctColors[Math.abs(hash) % distinctColors.length]; }
         function calculateCentroid(points) { var latSum = 0, lngSum = 0; points.forEach(p => { latSum += p.lat; lngSum += p.lng; }); return [latSum / points.length, lngSum / points.length]; }
-        function drawZoneBoundaries() { zoneLayerGroup.clearLayers(); var uniqueZones = new Set(); markers.forEach(m => { if(m.zone && m.zone !== "Other") uniqueZones.add(m.zone); }); uniqueZones.forEach(z => { var points = []; markers.forEach(m => { if (m.zone === z || m.zone.indexOf(z + '/') === 0) { points.push({lat: m.lat, lng: m.lng}); } }); if (points.length < 3) return; var hull = convexHull(points); var latlngs = hull.map(p => [p.lat, p.lng]); var color = getZoneColor(z); L.polygon(latlngs, { color: color, weight: 4, opacity: 0.9, fillColor: color, fillOpacity: 0.15, interactive: false }).addTo(zoneLayerGroup); var centroid = calculateCentroid(points); var labelText = z.toString().toLowerCase().includes('zone') ? z : 'Zone ' + z; var labelIcon = L.divIcon({ className: 'zone-label-icon', html: `<div class="zone-label-text" style="color:${color};border-color:${color}">${labelText}</div>`, iconSize: [0, 0], iconAnchor: [0, 0] }); L.marker(centroid, {icon: labelIcon, zIndexOffset: 10000, interactive: false}).addTo(zoneLayerGroup); }); }
+        function drawZoneBoundaries() { 
+            zoneLayerGroup.clearLayers(); 
+            var uniqueZones = new Set(); 
+            markers.forEach(m => { if(m.zone && m.zone !== "Other") uniqueZones.add(m.zone); }); 
+            uniqueZones.forEach(z => { 
+                var points = []; 
+                markers.forEach(m => { if (m.zone === z || m.zone.indexOf(z + '/') === 0) { points.push({lat: m.lat, lng: m.lng}); } }); 
+                if (points.length < 3) return; 
+                var hull = convexHull(points); 
+                var latlngs = hull.map(p => [p.lat, p.lng]); 
+                var color = getZoneColor(z); 
+                L.polygon(latlngs, { color: color, weight: 4, opacity: 0.9, fillColor: color, fillOpacity: 0.15, interactive: false }).addTo(zoneLayerGroup); 
+                var centroid = calculateCentroid(points); 
+                var labelText = z.toString().toLowerCase().includes('zone') ? z : 'Zone ' + z; 
+                var labelIcon = L.divIcon({ className: 'zone-label-icon', html: `<div class="zone-label-text" style="color:${color};border-color:${color}">${labelText}</div>`, iconSize: [0, 0], iconAnchor: [0, 0] }); 
+                L.marker(centroid, {icon: labelIcon, zIndexOffset: 10000, interactive: false}).addTo(zoneLayerGroup); 
+            }); 
+        }
         function convexHull(points) { var pts = points.slice(); pts.sort((a, b) => a.lat != b.lat ? a.lat - b.lat : a.lng - b.lng); var lower = []; for (var i = 0; i < pts.length; i++) { while (lower.length >= 2 && crossProduct(lower[lower.length - 2], lower[lower.length - 1], pts[i]) <= 0) { lower.pop(); } lower.push(pts[i]); } var upper = []; for (var i = pts.length - 1; i >= 0; i--) { while (upper.length >= 2 && crossProduct(upper[upper.length - 2], upper[upper.length - 1], pts[i]) <= 0) { upper.pop(); } upper.push(pts[i]); } upper.pop(); lower.pop(); return lower.concat(upper); }
         function crossProduct(o, a, b) { return (a.lng - o.lng) * (b.lat - o.lat) - (a.lat - o.lat) * (b.lng - o.lng); }
 
@@ -681,7 +708,22 @@
         function closePrintView() { document.getElementById('print-container').style.display = 'none'; }
 
         function toggleDropdown(t) { var el = document.getElementById(t+'-dropdown'); document.querySelectorAll('.dropdown-check-list').forEach(d => { if(d!==el) d.classList.remove('visible'); }); el.classList.toggle('visible'); }
-        function setupMultiFilters(z, t, f) { populate(z, 'zone', 'Zone'); populate(t, 'type', 'Type'); populate(f, 'freq', 'Freq'); var sSet = new Set(['Not Installed', 'Installed', 'Monitoring', 'Damaged', 'Done', 'Partial', 'Missing']); populate(sSet, 'status', 'Status'); }
+        
+        // Point 4: Modified Status Filter
+        function setupMultiFilters(z, t, f, isMon) { 
+            populate(z, 'zone', 'Zone'); 
+            populate(t, 'type', 'Type'); 
+            populate(f, 'freq', 'Freq'); 
+            
+            var sSet;
+            if (isMon) {
+                sSet = new Set(['Missing', 'Partial', 'Done']);
+            } else {
+                sSet = new Set(['Not Installed', 'Installed', 'Monitoring', 'Damaged', 'Control']);
+            }
+            populate(sSet, 'status', 'Status'); 
+        }
+
         function populate(set, type, label) { 
             var c = document.getElementById(type+'-items'); c.innerHTML=`<li class="check-label" onclick="toggleAll('${type}',this)"><input type="checkbox" id="all-${type}"><b>Select All</b></li>`; 
             var saved = localStorage.getItem('filter_' + type); var savedArr = saved ? JSON.parse(saved) : null; var allChecked = true;
@@ -702,8 +744,12 @@
             markers.forEach(m => {
                 var searchMatch = m.id.toUpperCase().includes(s);
                 var isControl = controlTypes.has(m.type);
-                if (isControl) { var typeSelected = st.includes("Control Point") || st.includes(m.type); if (typeSelected && searchMatch) { map.addLayer(m.layer); v.push(m); return; } }
-                if (isControl) { map.removeLayer(m.layer); return; }
+                if (isControl && !currentSheet.startsWith("M_")) { 
+                    // I_ Mode Control Logic
+                    var typeSelected = st.includes("Control Point") || st.includes(m.type); if (typeSelected && searchMatch) { map.addLayer(m.layer); v.push(m); return; } 
+                }
+                if (isControl && !currentSheet.startsWith("M_")) { map.removeLayer(m.layer); return; }
+                
                 var typeMatch = st.includes(m.type); var zoneMatch = sz.includes(m.zone); var freqMatch = sf.includes(m.freq); var statusMatch = ss.includes(m.status);
                 if (typeMatch && zoneMatch && statusMatch && freqMatch && searchMatch) { map.addLayer(m.layer); v.push(m); } else { map.removeLayer(m.layer); }
             });
@@ -714,7 +760,57 @@
         function updateBatchUI() { var btn = document.getElementById('batch-toggle-btn'); var bar = document.getElementById('batch-bar'); if(batchMode){ btn.classList.add('active'); bar.style.display='flex'; } else { btn.classList.remove('active'); bar.style.display='none'; } }
         function toggleBatchSelection(id) { var m = markers.find(x => x.id === id); if (!m) return; if (batchSelection.has(id)) { batchSelection.delete(id); if (m.layer.setStyle) { m.layer.setStyle({ fillColor: m.color, color: (m.id === m.zone ? 'white':'white'), weight: 2 }); } } else { batchSelection.add(id); if (m.layer.setStyle) { m.layer.setStyle({ fillColor: '#ffc107', color: 'black', weight: 4 }); } } document.getElementById('batch-count').innerText = batchSelection.size; }
         function clearBatchSelection() { batchSelection.forEach(id => { var m = markers.find(x => x.id === id); if (m && m.layer.setStyle) m.layer.setStyle({ fillColor: m.color, color: 'white', weight: 2 }); }); batchSelection.clear(); document.getElementById('batch-count').innerText = 0; }
-        function openBatchInstallModal() { if (batchSelection.size === 0) return; isBatchInstall = true; document.getElementById('modal-title').innerText = "Batch Install"; document.getElementById('modal-subtitle').innerText = batchSelection.size + " selected points"; var today = new Date().toISOString().split('T')[0]; document.getElementById('install-date-picker').value = today; document.getElementById('update-modal-overlay').style.display = 'flex'; }
+        
+        // Point 3: Batch Mode Logic Branching
+        function openBatchInstallModal() { 
+            if (batchSelection.size === 0) return; 
+            isBatchInstall = true; 
+            
+            var isMon = currentSheet.startsWith("M_");
+            document.getElementById('modal-title').innerText = isMon ? "Confirm Update" : "Batch Install";
+            document.getElementById('modal-subtitle').innerText = batchSelection.size + " selected points";
+            
+            // Toggle Date Picker Visibility
+            var dateContainer = document.getElementById('modal-date-container');
+            var saveBtn = document.getElementById('modal-save-btn');
+            
+            if (isMon) {
+                dateContainer.style.display = 'none';
+                saveBtn.innerText = "Mark as Done (v)";
+                saveBtn.onclick = saveBatchMonitoring;
+            } else {
+                dateContainer.style.display = 'block';
+                saveBtn.innerText = "Save";
+                saveBtn.onclick = saveInstall;
+                var today = new Date().toISOString().split('T')[0]; 
+                document.getElementById('install-date-picker').value = today; 
+            }
+            
+            document.getElementById('update-modal-overlay').style.display = 'flex'; 
+        }
+
+        function saveBatchMonitoring() {
+             document.getElementById('loading-overlay').style.display = 'flex';
+             var ids = Array.from(batchSelection);
+             // Optimistic UI Update
+             ids.forEach(id => {
+                 var m = markers.find(x=>x.id===id);
+                 if(m) {
+                    m.status = "Done"; m.color = monColorDone;
+                    if(m.layer.setStyle) m.layer.setStyle({fillColor:monColorDone});
+                    updatePopupContent(m);
+                 }
+             });
+             renderList(markers);
+             
+             fetch(API_URL, {
+                method: 'POST', body: JSON.stringify({action: 'batch_update_monitoring', sheet: currentSheet, ids: ids})
+             }).then(res => res.text()).then(txt => {
+                 alert(txt); toggleBatchMode(); reloadMap(); 
+             }).catch(err => { alert("Error"); document.getElementById('loading-overlay').style.display = 'none'; });
+             
+             closeModal();
+        }
 
         function toggleMeasure() { if (batchMode) toggleBatchMode(); measureMode = !measureMode; var btn = document.getElementById('measure-btn'); var box = document.getElementById('measure-box'); if (measureMode) { btn.classList.add('active'); box.style.display = 'block'; map.closePopup(); map.getContainer().style.cursor = 'crosshair'; } else { btn.classList.remove('active'); box.style.display = 'none'; clearMeasure(); map.getContainer().style.cursor = ''; } }
         function addMeasurePoint(latlng) { measurePoints.push(latlng); redrawMeasure(); calculateMeasure(); }
@@ -731,7 +827,7 @@
         function updateGPSBoxContent(lat, lon, acc) { var box = document.getElementById('gps-coords-box'); var content = ""; if (lat !== undefined && lon !== undefined) { try { if (typeof proj4 !== 'undefined') { var result = proj4("EPSG:4326", "EPSG:2326", [lon, lat]); content += `N: ${result[1].toFixed(3)} | E: ${result[0].toFixed(3)}`; if(acc) content += ` <br><small>精度: ±${Math.round(acc)}m</small>`; } else { content += `Lat: ${lat.toFixed(5)} | Lon: ${lon.toFixed(5)}`; } } catch(e) { content += `Lat: ${lat.toFixed(5)} | Lon: ${lon.toFixed(5)}`; } box.setAttribute('data-last-pos', content); } else { content = box.getAttribute('data-last-pos') || "Waiting..."; } if (currentHeading !== null && !isNaN(currentHeading)) { var h = currentHeading; var dirStr = ""; if (h >= 337.5 || h < 22.5) dirStr = "N"; else if (h >= 22.5 && h < 67.5) dirStr = "NE"; else if (h >= 67.5 && h < 112.5) dirStr = "E"; else if (h >= 112.5 && h < 157.5) dirStr = "SE"; else if (h >= 157.5 && h < 202.5) dirStr = "S"; else if (h >= 202.5 && h < 247.5) dirStr = "SW"; else if (h >= 247.5 && h < 292.5) dirStr = "W"; else if (h >= 292.5 && h < 337.5) dirStr = "NW"; content += ` | ⬆ ${Math.round(h)}° (${dirStr})`; } box.innerHTML = content; }
         function toggleGPS() { var gpsBtn = document.getElementById('gps-btn'); var gpsBox = document.getElementById('gps-coords-box'); if (!gpsActive) { if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') { DeviceOrientationEvent.requestPermission().then(resp => { if(resp=='granted'){} }).catch(console.error); } if ("geolocation" in navigator) { gpsBtn.classList.add('active'); gpsBox.style.display = 'block'; gpsBox.innerHTML = "正在獲取衛星訊號..."; gpsActive = true; gpsWatchId = navigator.geolocation.watchPosition( function(position) { var lat = position.coords.latitude; var lon = position.coords.longitude; var acc = position.coords.accuracy; var latlng = [lat, lon]; if (!userMarker) { var beamIcon = L.divIcon({ className: 'user-location-marker', html: '<div class="location-beam"></div><div class="location-dot"></div>', iconSize: [40, 40], iconAnchor: [20, 20] }); userMarker = L.marker(latlng, {icon: beamIcon, zIndexOffset: 1000}).addTo(map); } else { userMarker.setLatLng(latlng); } map.setView(latlng); updateGPSBoxContent(lat, lon, acc); }, function(error) { gpsBox.innerHTML = "GPS Error: " + error.message; }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 } ); } else { alert("瀏覽器不支持 GPS"); } } else { if(gpsWatchId !== null) navigator.geolocation.clearWatch(gpsWatchId); gpsWatchId = null; gpsBtn.classList.remove('active'); gpsBox.style.display = 'none'; gpsActive = false; if(userMarker) map.removeLayer(userMarker); userMarker = null; } }
 
-        function openInstallModal(id) { isBatchInstall = false; currentEditingId = id; document.getElementById('modal-title').innerText = "Update Install Date"; document.getElementById('modal-subtitle').innerText = id; var today = new Date().toISOString().split('T')[0]; document.getElementById('install-date-picker').value = today; document.getElementById('update-modal-overlay').style.display = 'flex'; }
+        function openInstallModal(id) { isBatchInstall = false; currentEditingId = id; document.getElementById('modal-title').innerText = "Update Install Date"; document.getElementById('modal-subtitle').innerText = id; document.getElementById('modal-date-container').style.display='block'; var saveBtn=document.getElementById('modal-save-btn'); saveBtn.innerText='Save'; saveBtn.onclick=saveInstall; var today = new Date().toISOString().split('T')[0]; document.getElementById('install-date-picker').value = today; document.getElementById('update-modal-overlay').style.display = 'flex'; }
         function closeModal() { document.getElementById('update-modal-overlay').style.display = 'none'; currentEditingId = null; isBatchInstall = false; }
         function saveInstall() { var d = document.getElementById('install-date-picker').value; if(!d) { alert("Please select date"); return; } if (isBatchInstall) { submitBatchInstallData(d); } else { if(!currentEditingId) return; updateStatus(currentEditingId, d); } closeModal(); }
         function updateStatus(id, dateStr) { var m = markers.find(x => x.id === id); if(m) { m.status = "Installed"; m.color = colorInstalled; m.installDate = dateStr; if(m.layer.setStyle) m.layer.setStyle({fillColor: colorInstalled}); updatePopupContent(m); } fetch(API_URL, {method:'POST', body:JSON.stringify({action:'update', sheet:currentSheet, id:id, status:1, date:dateStr})}).catch(err => alert("Update Error (Background)")); }
@@ -749,13 +845,9 @@
             
             var btnHtml = "";
             
-            // Allow update buttons only for I_ sheets or if damaged toggle is generic
-            // Current instruction doesn't specify M_ sheets can act on data (read only view), 
-            // but keeps damaged toggle.
             if(m.isDamaged) {
                  btnHtml = `<button onclick="toggleDamaged('${m.id}', false)" style="width:100%;background:#28a745;color:white;border:none;padding:8px;border-radius:4px;cursor:pointer;margin-top:10px;">Reinstate (Fix)</button>`;
             } else if (!currentSheet.startsWith("M_")) {
-                 // ONLY SHOW INSTALL/INITIAL BUTTONS FOR I_ SHEETS
                  var hasInstall = (m.installDate && m.installDate !== "-" && m.installDate !== "");
                  var hasInit = (m.initDate && m.initDate !== "-" && m.initDate !== "");
                  if (!hasInstall) {
@@ -766,8 +858,6 @@
                      btnHtml = `<button disabled style="width:100%;background:#ccc;border:none;padding:8px;border-radius:4px;margin-top:10px;">Locked</button>`;
                  }
             } else {
-                 // For M_ sheets, maybe just Locked/View Only
-                 // Or we leave it empty.
                  btnHtml = "";
             }
 
