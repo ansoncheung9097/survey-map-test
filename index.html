@@ -521,8 +521,13 @@
         <div id="map"></div>
         
         <div id="batch-bar">
-            <div>Selected: <span id="batch-count" style="font-weight:bold;color:#ffc107">0</span></div>
-            <button class="batch-confirm-btn" onclick="openBatchInstallModal()">Install Selected</button>
+            <div style="display:flex; align-items:center;">
+                <div style="margin-right:15px;">Selected: <span id="batch-count" style="font-weight:bold;color:#ffc107">0</span></div>
+            </div>
+            <div style="display:flex; gap:10px;">
+                <button class="batch-confirm-btn" onclick="selectAllVisible()" style="background:#17a2b8;font-size:12px;padding:8px 12px;">Select Visible</button>
+                <button class="batch-confirm-btn" id="batch-confirm-btn" onclick="openBatchInstallModal()">Install Selected</button>
+            </div>
         </div>
 
         <div id="legend-container" class="legend">
@@ -726,9 +731,13 @@
         function goHome() { 
             document.getElementById('map-container').style.display = 'none';
             document.getElementById('home-screen').style.display = 'flex'; 
-            batchMode = false; measureMode = false; 
-            updateBatchUI(); toggleMeasure(false);
-            if(gpsActive) toggleGPS();
+            
+            // Correct logic to turn off features if active
+            if (batchMode) toggleBatchMode(); 
+            if (measureMode) toggleMeasure();
+            if (gpsActive) toggleGPS();
+            
+            updateBatchUI();
             
             localStorage.removeItem("bsm_last_sheet");
         }
@@ -772,8 +781,28 @@
                 }
             });
 
-            // NOTE: Layers are NOT added by default as requested (Zone/Measure)
-            
+            // Range Selection logic (Shift+Drag)
+            map.on('boxzoomend', function(e) {
+                if (batchMode) {
+                    var bounds = e.boxZoomBounds;
+                    markers.forEach(m => {
+                        if (map.hasLayer(m.layer) && bounds.contains(m.layer.getLatLng())) {
+                            // Check eligibility
+                            var eligible = false;
+                            if (isMonitoringMode) {
+                                if (m.status !== "Done" && m.status !== "Damaged") eligible = true;
+                            } else {
+                                if (m.status === "Not Installed") eligible = true;
+                            }
+                            
+                            if (eligible) {
+                                if (!batchSelection.has(m.id)) toggleBatchSelection(m.id);
+                            }
+                        }
+                    });
+                }
+            });
+
             map.on('moveend', function() {
                 var c = map.getCenter();
                 var z = map.getZoom();
@@ -880,15 +909,10 @@
                 } 
                 // --- SIMPLIFIED LOGIC FOR I_ SHEETS ---
                 else {
-                    // Already calculated hasInstallDate above
-                    // var hasInitDate = (p.init && p.init.trim() !== ""); // REMOVED
-
                     if (isDamaged) { statusStr = "Damaged"; color = "red"; }
                     else if (isControl) { statusStr = "Control"; color = "#FF0000"; }
                     else {
-                        // Removed Monitoring Status
                         if (hasInstallDate) { color = colorInstalled; statusStr = "Installed"; }
-                        // Else stays Red (Not Installed)
                     }
                 }
                 
@@ -917,9 +941,8 @@
                         addMeasurePoint(e.latlng);
                     } else if (batchMode) {
                         e.target.closePopup();
-                        // I_ Mode Batch Restriction: Only select 'Not Installed'
+                        // Support M_ Mode selection on map
                         if (isMonitoringMode) {
-                            // M Mode logic handled by modal, but if map click was possible:
                             if (statusStr !== "Done" && statusStr !== "Damaged") toggleBatchSelection(p.id);
                         } else {
                             // I Mode Logic
@@ -1219,22 +1242,33 @@
         function toggleBatchMode() {
             if (measureMode) toggleMeasure(); // Close Measure if open
             
-            // Branch: If Monitoring Mode, Open Input Modal
-            if (isMonitoringMode) {
-                openBatchInputModal();
-                // We don't use 'batchMode' global state for map clicking in this mode
-                return;
-            }
-
-            // Normal I_ Mode: Map Selection
+            // Allow Map Selection for M_ Mode (Removed specific M_ block)
+            
             batchMode = !batchMode;
             var btn = document.getElementById('batch-toggle-btn');
             var bar = document.getElementById('batch-bar');
-            if (batchMode) { btn.classList.add('active'); bar.style.display = 'flex'; map.closePopup(); } 
-            else { btn.classList.remove('active'); bar.style.display = 'none'; clearBatchSelection(); }
+            if (batchMode) { 
+                btn.classList.add('active'); 
+                bar.style.display = 'flex'; 
+                map.closePopup(); 
+                
+                // Update button text contextually
+                var confirmBtn = document.getElementById('batch-confirm-btn');
+                confirmBtn.innerText = isMonitoringMode ? "Update Status" : "Install Selected";
+                
+            } else { 
+                btn.classList.remove('active'); 
+                bar.style.display = 'none'; 
+                clearBatchSelection(); 
+            }
         }
         
-        function updateBatchUI() { var btn = document.getElementById('batch-toggle-btn'); var bar = document.getElementById('batch-bar'); if(batchMode){ btn.classList.add('active'); bar.style.display='flex'; } else { btn.classList.remove('active'); bar.style.display='none'; } }
+        function updateBatchUI() { 
+            var btn = document.getElementById('batch-toggle-btn'); 
+            var bar = document.getElementById('batch-bar'); 
+            if(batchMode){ btn.classList.add('active'); bar.style.display='flex'; } else { btn.classList.remove('active'); bar.style.display='none'; } 
+        }
+
         function toggleBatchSelection(id) {
             var m = markers.find(x => x.id === id);
             if (!m) return;
@@ -1251,17 +1285,50 @@
             batchSelection.forEach(id => { var m = markers.find(x => x.id === id); if (m && m.layer.setStyle) m.layer.setStyle({ fillColor: m.color, color: 'white', weight: 2 }); });
             batchSelection.clear(); document.getElementById('batch-count').innerText = 0;
         }
+        
+        // Select Visible Helper for "Range" Selection
+        function selectAllVisible() {
+            if (!batchMode) return;
+            var bounds = map.getBounds();
+            var addedCount = 0;
+            markers.forEach(m => {
+                if (map.hasLayer(m.layer) && bounds.contains(m.layer.getLatLng())) {
+                    var eligible = false;
+                    if (isMonitoringMode) {
+                        if (m.status !== "Done" && m.status !== "Damaged") eligible = true;
+                    } else {
+                        if (m.status === "Not Installed") eligible = true;
+                    }
+
+                    if (eligible) {
+                        if (!batchSelection.has(m.id)) {
+                            toggleBatchSelection(m.id);
+                            addedCount++;
+                        }
+                    }
+                }
+            });
+        }
+
         function openBatchInstallModal() {
             if (batchSelection.size === 0) return;
             isBatchInstall = true;
-            document.getElementById('modal-title').innerText = "Batch Install";
-            document.getElementById('modal-subtitle').innerText = batchSelection.size + " selected points";
+            
+            // Context Aware Titles
+            if (isMonitoringMode) {
+                document.getElementById('modal-title').innerText = "Batch Update Status";
+                document.getElementById('modal-subtitle').innerText = batchSelection.size + " points selected";
+            } else {
+                document.getElementById('modal-title').innerText = "Batch Install";
+                document.getElementById('modal-subtitle').innerText = batchSelection.size + " selected points";
+            }
+            
             var today = new Date().toISOString().split('T')[0];
             document.getElementById('install-date-picker').value = today; 
             document.getElementById('update-modal-overlay').style.display = 'flex';
         }
 
-        // --- M_ Mode Batch Input Logic ---
+        // --- M_ Mode Batch Input Logic (Preserved for compatibility but currently unused via map flow) ---
         function openBatchInputModal() {
             var modal = document.getElementById('batch-input-modal');
             var typeSelect = document.getElementById('batch-input-type');
@@ -1326,18 +1393,13 @@
             if (numbers.size === 0) { alert("No valid numbers found"); return; }
 
             // Match IDs
-            // Logic: Filter markers by Type, then check if their ID ends with the number
             var matchedIds = [];
             markers.forEach(m => {
                 if (m.type === type) {
-                    // Extract number from ID (e.g., ST-01 -> 1, 005 -> 5)
-                    // Regex looks for digits at the end of string
                     var match = m.id.match(/(\d+)$/);
                     if (match) {
                         var idNum = parseInt(match[1], 10);
                         if (numbers.has(idNum)) {
-                            // Feature 2: Only select 'Not Installed' (Red/Orange aka Not Done) points
-                            // We ignore points that are already 'Done' (Green)
                             if (m.status !== 'Done') {
                                 matchedIds.push(m.id);
                             }
@@ -1355,10 +1417,7 @@
             batchSelection.clear();
             matchedIds.forEach(id => batchSelection.add(id));
             
-            // Close Input Modal first
             closeBatchInputModal();
-            
-            // Call existing submit logic
             submitBatchInstallData(date);
         }
 
@@ -1603,6 +1662,3 @@
     </script>
 </body>
 </html>
-
-
-
