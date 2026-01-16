@@ -191,6 +191,8 @@
             z-index: 10000;
             pointer-events: none;
             display: none;
+            user-select: none;
+            -webkit-user-select: none;
         }
 
         /* Sidebar & Filters */
@@ -1353,24 +1355,30 @@
         function handleTouchStart(e) {
             if (!touchSelectActive || e.touches.length !== 1) return;
             var touch = e.touches[0];
-            touchStartPoint = { x: touch.clientX, y: touch.clientY };
+            var mapRect = map.getContainer().getBoundingClientRect();
             
-            // Set initial position
+            // Relative coordinates
+            touchStartPoint = { 
+                x: touch.clientX - mapRect.left, 
+                y: touch.clientY - mapRect.top 
+            };
+            
             selectionBox.style.left = touchStartPoint.x + 'px';
             selectionBox.style.top = touchStartPoint.y + 'px';
             selectionBox.style.width = '0px';
             selectionBox.style.height = '0px';
             selectionBox.style.display = 'block';
             
-            e.preventDefault(); // Stop default map panning
+            e.preventDefault(); 
         }
         
         function handleTouchMove(e) {
             if (!touchSelectActive || !touchStartPoint || e.touches.length !== 1) return;
             var touch = e.touches[0];
+            var mapRect = map.getContainer().getBoundingClientRect();
             
-            var currentX = touch.clientX;
-            var currentY = touch.clientY;
+            var currentX = touch.clientX - mapRect.left;
+            var currentY = touch.clientY - mapRect.top;
             
             var width = Math.abs(currentX - touchStartPoint.x);
             var height = Math.abs(currentY - touchStartPoint.y);
@@ -1384,55 +1392,59 @@
             
             e.preventDefault();
         }
-        
+
         function handleTouchEnd(e) {
             if (!touchSelectActive || !touchStartPoint) return;
             
-            // Calculate latlng bounds from pixel bounds
             var rect = selectionBox.getBoundingClientRect();
+            var mapRect = map.getContainer().getBoundingClientRect();
             
-            // If dragging was minimal, treat as click and do nothing (or we could select single)
+            var tlX = rect.left - mapRect.left;
+            var tlY = rect.top - mapRect.top;
+            var brX = rect.right - mapRect.left;
+            var brY = rect.bottom - mapRect.top;
+
             if (rect.width > 5 && rect.height > 5) {
-                var northWest = map.containerPointToLatLng([rect.left, rect.top]);
-                var southEast = map.containerPointToLatLng([rect.right, rect.bottom]);
-                var bounds = L.latLngBounds(northWest, southEast);
-                
-                processBoxSelection(bounds);
+                // Use pixel-based selection with tolerance
+                selectMarkersInPixelRect({
+                    minX: tlX, minY: tlY, maxX: brX, maxY: brY
+                });
             }
             
-            // Reset UI
             selectionBox.style.display = 'none';
             touchStartPoint = null;
-            
-            // Optional: Auto turn off mode? Usually dragging mode stays on for multiple selects
         }
-        
-        function processBoxSelection(bounds) {
+
+        // Shared function for pixel-based selection
+        function selectMarkersInPixelRect(rect) {
             markers.forEach(m => {
-                if (map.hasLayer(m.layer) && bounds.contains(m.layer.getLatLng())) {
+                if (map.hasLayer(m.layer)) {
                     if (isEligibleForSelection(m)) {
-                        if (!batchSelection.has(m.id)) toggleBatchSelection(m.id);
+                        var pt = map.latLngToContainerPoint(m.layer.getLatLng());
+                        var radius = 15; // Tolerance radius (pixels) to allow easier selection
+                        
+                        if (pt.x >= rect.minX - radius && pt.x <= rect.maxX + radius &&
+                            pt.y >= rect.minY - radius && pt.y <= rect.maxY + radius) {
+                            if (!batchSelection.has(m.id)) toggleBatchSelection(m.id);
+                        }
                     }
                 }
             });
         }
 
-        function openBatchInstallModal() {
-            if (batchSelection.size === 0) return;
-            isBatchInstall = true;
+        // Update processBoxSelection to also use pixel logic (for consistency)
+        function processBoxSelection(bounds) {
+            var p1 = map.latLngToContainerPoint(bounds.getNorthWest());
+            var p2 = map.latLngToContainerPoint(bounds.getSouthEast());
             
-            // Context Aware Titles
-            if (isMonitoringMode) {
-                document.getElementById('modal-title').innerText = "Batch Update Status";
-                document.getElementById('modal-subtitle').innerText = batchSelection.size + " points selected";
-            } else {
-                document.getElementById('modal-title').innerText = "Batch Install";
-                document.getElementById('modal-subtitle').innerText = batchSelection.size + " selected points";
-            }
+            var minX = Math.min(p1.x, p2.x);
+            var maxX = Math.max(p1.x, p2.x);
+            var minY = Math.min(p1.y, p2.y);
+            var maxY = Math.max(p1.y, p2.y);
             
-            var today = new Date().toISOString().split('T')[0];
-            document.getElementById('install-date-picker').value = today; 
-            document.getElementById('update-modal-overlay').style.display = 'flex';
+            selectMarkersInPixelRect({
+                minX: minX, minY: minY, maxX: maxX, maxY: maxY
+            });
         }
 
         // --- M_ Mode Batch Input Logic (Preserved for compatibility but currently unused via map flow) ---
