@@ -180,8 +180,18 @@
         .measure-btn-small { margin-top:5px; padding:4px 10px; font-size:11px; cursor: pointer; border: 1px solid #ccc; border-radius: 4px; background: #eee; font-weight: bold; }
 
         /* Batch Bar (Map Selection Mode) */
-        #batch-bar { position: absolute; bottom: 0; left: 0; width: 100%; background: rgba(0,0,0,0.85); color: white; z-index: 8000; display: none; padding: 15px; box-sizing: border-box; justify-content: space-between; align-items: center; box-shadow: 0 -4px 10px rgba(0,0,0,0.2); }
-        .batch-confirm-btn { background: #28a745; color: white; border: none; padding: 10px 20px; border-radius: 6px; font-weight: bold; cursor: pointer; }
+        #batch-bar { position: absolute; bottom: 0; left: 0; width: 100%; background: rgba(0,0,0,0.85); color: white; z-index: 8000; display: none; padding: 10px; box-sizing: border-box; justify-content: space-between; align-items: center; box-shadow: 0 -4px 10px rgba(0,0,0,0.2); flex-wrap: wrap; gap: 8px; }
+        .batch-confirm-btn { background: #28a745; color: white; border: none; padding: 8px 14px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 13px; white-space: nowrap; }
+
+        /* Selection Box for Touch Drag */
+        .selection-box {
+            position: absolute;
+            border: 2px dashed #007bff;
+            background-color: rgba(0, 123, 255, 0.2);
+            z-index: 10000;
+            pointer-events: none;
+            display: none;
+        }
 
         /* Sidebar & Filters */
         #sidebar { position:absolute; left:0; top:0; bottom:0; width:320px; background:white; z-index:4000; transform:translateX(-100%); transition:transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); box-shadow:2px 0 20px rgba(0,0,0,0.1); display:flex; flex-direction:column; }
@@ -524,8 +534,9 @@
             <div style="display:flex; align-items:center;">
                 <div style="margin-right:15px;">Selected: <span id="batch-count" style="font-weight:bold;color:#ffc107">0</span></div>
             </div>
-            <div style="display:flex; gap:10px;">
-                <button class="batch-confirm-btn" onclick="selectAllVisible()" style="background:#17a2b8;font-size:12px;padding:8px 12px;">Select Visible</button>
+            <div style="display:flex; gap:10px; align-items:center;">
+                <button class="batch-confirm-btn" id="touch-select-btn" onclick="toggleTouchSelect()" style="background:#6c757d;">Draw Box (Touch)</button>
+                <button class="batch-confirm-btn" onclick="selectAllVisible()" style="background:#17a2b8;">Select Visible</button>
                 <button class="batch-confirm-btn" id="batch-confirm-btn" onclick="openBatchInstallModal()">Install Selected</button>
             </div>
         </div>
@@ -565,6 +576,11 @@
         var batchMode = false, batchSelection = new Set(), isBatchInstall = false;
         var measureMode = false, measurePoints = [], measureLayerGroup = L.layerGroup();
         var userMarker = null; 
+        
+        // Touch Select Vars
+        var touchSelectActive = false;
+        var touchStartPoint = null;
+        var selectionBox = null;
         
         // Zone Boundary vars
         var zoneLayerGroup = L.layerGroup();
@@ -768,6 +784,19 @@
             L.control.layers({"Standard": osmLayer, "Satellite": satLayer}).addTo(map);
             L.control.zoom({position: 'bottomright'}).addTo(map);
             
+            // Touch Select Events
+            var mapContainer = map.getContainer();
+            mapContainer.addEventListener('touchstart', handleTouchStart, {passive: false});
+            mapContainer.addEventListener('touchmove', handleTouchMove, {passive: false});
+            mapContainer.addEventListener('touchend', handleTouchEnd);
+            
+            // Create selection box element
+            if (!selectionBox) {
+                selectionBox = document.createElement('div');
+                selectionBox.className = 'selection-box';
+                mapContainer.appendChild(selectionBox);
+            }
+
             // Map Rotate Event for Compass
             map.on('rotate', function() {
                 var bearing = map.getBearing();
@@ -784,22 +813,7 @@
             // Range Selection logic (Shift+Drag)
             map.on('boxzoomend', function(e) {
                 if (batchMode) {
-                    var bounds = e.boxZoomBounds;
-                    markers.forEach(m => {
-                        if (map.hasLayer(m.layer) && bounds.contains(m.layer.getLatLng())) {
-                            // Check eligibility
-                            var eligible = false;
-                            if (isMonitoringMode) {
-                                if (m.status !== "Done" && m.status !== "Damaged") eligible = true;
-                            } else {
-                                if (m.status === "Not Installed") eligible = true;
-                            }
-                            
-                            if (eligible) {
-                                if (!batchSelection.has(m.id)) toggleBatchSelection(m.id);
-                            }
-                        }
-                    });
+                    processBoxSelection(e.boxZoomBounds);
                 }
             });
 
@@ -1242,11 +1256,10 @@
         function toggleBatchMode() {
             if (measureMode) toggleMeasure(); // Close Measure if open
             
-            // Allow Map Selection for M_ Mode (Removed specific M_ block)
-            
             batchMode = !batchMode;
             var btn = document.getElementById('batch-toggle-btn');
             var bar = document.getElementById('batch-bar');
+            
             if (batchMode) { 
                 btn.classList.add('active'); 
                 bar.style.display = 'flex'; 
@@ -1260,6 +1273,9 @@
                 btn.classList.remove('active'); 
                 bar.style.display = 'none'; 
                 clearBatchSelection(); 
+                
+                // Also turn off touch select if active
+                if (touchSelectActive) toggleTouchSelect();
             }
         }
         
@@ -1293,18 +1309,109 @@
             var addedCount = 0;
             markers.forEach(m => {
                 if (map.hasLayer(m.layer) && bounds.contains(m.layer.getLatLng())) {
-                    var eligible = false;
-                    if (isMonitoringMode) {
-                        if (m.status !== "Done" && m.status !== "Damaged") eligible = true;
-                    } else {
-                        if (m.status === "Not Installed") eligible = true;
-                    }
-
-                    if (eligible) {
+                    if (isEligibleForSelection(m)) {
                         if (!batchSelection.has(m.id)) {
                             toggleBatchSelection(m.id);
                             addedCount++;
                         }
+                    }
+                }
+            });
+        }
+        
+        function isEligibleForSelection(m) {
+            if (isMonitoringMode) {
+                if (m.status !== "Done" && m.status !== "Damaged") return true;
+            } else {
+                if (m.status === "Not Installed") return true;
+            }
+            return false;
+        }
+        
+        // --- Touch Box Selection Logic ---
+        function toggleTouchSelect() {
+            touchSelectActive = !touchSelectActive;
+            var btn = document.getElementById('touch-select-btn');
+            
+            if (touchSelectActive) {
+                btn.style.background = '#ffc107';
+                btn.style.color = 'black';
+                map.dragging.disable();
+                map.touchZoom.disable();
+                map.scrollWheelZoom.disable();
+            } else {
+                btn.style.background = '#6c757d';
+                btn.style.color = 'white';
+                map.dragging.enable();
+                map.touchZoom.enable();
+                map.scrollWheelZoom.enable();
+                // Clear any leftover box
+                if (selectionBox) selectionBox.style.display = 'none';
+            }
+        }
+        
+        function handleTouchStart(e) {
+            if (!touchSelectActive || e.touches.length !== 1) return;
+            var touch = e.touches[0];
+            touchStartPoint = { x: touch.clientX, y: touch.clientY };
+            
+            // Set initial position
+            selectionBox.style.left = touchStartPoint.x + 'px';
+            selectionBox.style.top = touchStartPoint.y + 'px';
+            selectionBox.style.width = '0px';
+            selectionBox.style.height = '0px';
+            selectionBox.style.display = 'block';
+            
+            e.preventDefault(); // Stop default map panning
+        }
+        
+        function handleTouchMove(e) {
+            if (!touchSelectActive || !touchStartPoint || e.touches.length !== 1) return;
+            var touch = e.touches[0];
+            
+            var currentX = touch.clientX;
+            var currentY = touch.clientY;
+            
+            var width = Math.abs(currentX - touchStartPoint.x);
+            var height = Math.abs(currentY - touchStartPoint.y);
+            var left = Math.min(currentX, touchStartPoint.x);
+            var top = Math.min(currentY, touchStartPoint.y);
+            
+            selectionBox.style.width = width + 'px';
+            selectionBox.style.height = height + 'px';
+            selectionBox.style.left = left + 'px';
+            selectionBox.style.top = top + 'px';
+            
+            e.preventDefault();
+        }
+        
+        function handleTouchEnd(e) {
+            if (!touchSelectActive || !touchStartPoint) return;
+            
+            // Calculate latlng bounds from pixel bounds
+            var rect = selectionBox.getBoundingClientRect();
+            
+            // If dragging was minimal, treat as click and do nothing (or we could select single)
+            if (rect.width > 5 && rect.height > 5) {
+                var northWest = map.containerPointToLatLng([rect.left, rect.top]);
+                var southEast = map.containerPointToLatLng([rect.right, rect.bottom]);
+                var bounds = L.latLngBounds(northWest, southEast);
+                
+                processBoxSelection(bounds);
+            }
+            
+            // Reset UI
+            selectionBox.style.display = 'none';
+            touchStartPoint = null;
+            
+            // Optional: Auto turn off mode? Usually dragging mode stays on for multiple selects
+        }
+        
+        function processBoxSelection(bounds) {
+            markers.forEach(m => {
+                if (map.hasLayer(m.layer) && bounds.contains(m.layer.getLatLng())) {
+                    if (isEligibleForSelection(m)) {
+                        if (!batchSelection.has(m.id)) toggleBatchSelection(m.id);
                     }
                 }
             });
