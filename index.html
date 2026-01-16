@@ -539,7 +539,7 @@
             <div style="display:flex; gap:10px; align-items:center;">
                 <button class="batch-confirm-btn" id="touch-select-btn" onclick="toggleTouchSelect()" style="background:#6c757d;">Draw Box (Touch)</button>
                 <button class="batch-confirm-btn" onclick="selectAllVisible()" style="background:#17a2b8;">Select Visible</button>
-                <button class="batch-confirm-btn" id="batch-confirm-btn" onclick="openBatchInstallModal()">Install Selected</button>
+                <button class="batch-confirm-btn" id="batch-confirm-btn" type="button" onclick="openBatchInstallModal()">Install Selected</button>
             </div>
         </div>
 
@@ -951,20 +951,17 @@
                 marker.bindTooltip(String(p.id), { permanent: true, direction: 'top', offset: [0, 5], className: lblClass });
                 marker.bindPopup("Loading...");
 
+                // Enhanced Click Handler to prevent stale closure data and support consistent selection
                 marker.on('click', function(e) {
                     if (measureMode) {
                         e.target.closePopup();
                         addMeasurePoint(e.latlng);
                     } else if (batchMode) {
                         e.target.closePopup();
-                        // Support M_ Mode selection on map
-                        if (isMonitoringMode) {
-                            if (statusStr !== "Done" && statusStr !== "Damaged") toggleBatchSelection(p.id);
-                        } else {
-                            // I Mode Logic
-                            if (statusStr === "Not Installed") { 
-                                toggleBatchSelection(p.id);
-                            }
+                        // Retrieve the LATEST marker object from the global array to ensure status is current
+                        var mObj = markers.find(x => x.id === String(p.id));
+                        if (mObj && isEligibleForSelection(mObj)) {
+                            toggleBatchSelection(mObj.id);
                         }
                     } else {
                         var currentM = markers.find(x => x.id === String(p.id));
@@ -1002,7 +999,16 @@
 
             setupMultiFilters(uZones, uTypes, uFreq);
             applyFilter();
-            // Don't draw Zones by default
+            
+            // Re-apply batch selection highlights if we just reloaded in batch mode
+            if (batchMode && batchSelection.size > 0) {
+                batchSelection.forEach(id => {
+                    var m = markers.find(x => x.id === id);
+                    if (m && m.layer.setStyle) { 
+                        m.layer.setStyle({ fillColor: '#ffc107', color: 'black', weight: 4 }); 
+                    }
+                });
+            }
         }
 
         // --- Compass Reset ---
@@ -1269,7 +1275,9 @@
                 
                 // Update button text contextually
                 var confirmBtn = document.getElementById('batch-confirm-btn');
-                confirmBtn.innerText = isMonitoringMode ? "Update Status" : "Install Selected";
+                if (confirmBtn) {
+                    confirmBtn.innerText = isMonitoringMode ? "Update Status" : "Install Selected";
+                }
                 
             } else { 
                 btn.classList.remove('active'); 
@@ -1354,6 +1362,10 @@
         
         function handleTouchStart(e) {
             if (!touchSelectActive || e.touches.length !== 1) return;
+            
+            // Prevent interference with UI buttons
+            if (e.target.closest('.batch-confirm-btn') || e.target.closest('#batch-bar')) return;
+
             var touch = e.touches[0];
             var mapRect = map.getContainer().getBoundingClientRect();
             
@@ -1775,8 +1787,30 @@
             fetch(API_URL, {
                 method: 'POST', body: JSON.stringify({action: 'batch_install', sheet: currentSheet, ids: ids, date: dateStr})
             }).then(res => res.text()).then(txt => {
-                alert(txt); if(!isMonitoringMode) toggleBatchMode(); reloadMap(); 
+                alert(txt); 
+                // Clear selection so UI resets correctly after reload
+                clearBatchSelection();
+                if(!isMonitoringMode) toggleBatchMode(); 
+                reloadMap(); 
             }).catch(err => { alert("Error"); document.getElementById('loading-overlay').style.display = 'none'; });
+        }
+        
+        function openBatchInstallModal() {
+            if (batchSelection.size === 0) return;
+            isBatchInstall = true;
+            
+            // Context Aware Titles
+            if (isMonitoringMode) {
+                document.getElementById('modal-title').innerText = "Batch Update Status";
+                document.getElementById('modal-subtitle').innerText = batchSelection.size + " points selected";
+            } else {
+                document.getElementById('modal-title').innerText = "Batch Install";
+                document.getElementById('modal-subtitle').innerText = batchSelection.size + " selected points";
+            }
+            
+            var today = new Date().toISOString().split('T')[0];
+            document.getElementById('install-date-picker').value = today; 
+            document.getElementById('update-modal-overlay').style.display = 'flex';
         }
     </script>
 </body>
