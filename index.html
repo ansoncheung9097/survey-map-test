@@ -258,11 +258,19 @@
         
         /* NEW: Photo Modal Styles */
         #photo-modal-overlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); z-index:11000; align-items:center; justify-content:center; flex-direction: column; }
-        #photo-modal-img { max-width:95%; max-height:80%; border: 3px solid white; border-radius: 4px; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
+        #photo-modal-img { max-width:95%; max-height:75%; border: 3px solid white; border-radius: 4px; box-shadow: 0 0 20px rgba(0,0,0,0.5); object-fit: contain; background: black; }
         .photo-close-btn { color: white; font-size: 40px; position: absolute; top: 20px; right: 30px; cursor: pointer; font-weight: bold; z-index: 11001; text-shadow: 0 0 5px black; }
         .photo-caption { color: white; margin-top: 15px; font-size: 16px; font-weight: bold; text-shadow: 0 1px 3px black; }
         .view-photo-btn { width:100%; background: #6f42c1; color: white; border: none; padding: 8px; border-radius: 4px; cursor: pointer; margin-top: 10px; font-weight: bold; display: flex; align-items: center; justify-content: center; gap: 5px; transition: background 0.2s; }
         .view-photo-btn:hover { background: #5a32a3; }
+        
+        /* Original Link Button */
+        #photo-original-link { margin-top: 15px; color: #aaa; text-decoration: underline; font-size: 14px; cursor: pointer; }
+        #photo-original-link:hover { color: white; }
+        
+        /* Error Message in Modal */
+        #photo-error-msg { display:none; color: #ff6b6b; font-weight: bold; text-align: center; margin-bottom: 10px; background: rgba(0,0,0,0.8); padding: 10px; border-radius: 8px; }
+        #photo-loading-msg { display:none; color: white; font-weight: bold; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 11002; pointer-events: none; }
 
         /* Leaflet Overrides */
         .leaflet-tooltip { background: transparent !important; border: none !important; box-shadow: none !important; font-family: Arial, sans-serif; white-space: nowrap; font-weight: 900; }
@@ -559,8 +567,12 @@
     <!-- NEW: Photo Modal Viewer -->
     <div id="photo-modal-overlay" onclick="closePhotoModal()">
         <span class="photo-close-btn">&times;</span>
+        <div id="photo-loading-msg">Loading...</div>
         <img id="photo-modal-img" src="" alt="Point Photo" onclick="event.stopPropagation()">
+        <div id="photo-error-msg">預覽失敗 (Preview Failed)<br>請點擊下方按鈕</div>
         <div id="photo-modal-caption" class="photo-caption"></div>
+        <!-- NEW: Original Link Button for Debugging -->
+        <a id="photo-original-link" href="#" target="_blank" onclick="event.stopPropagation()">📷 Open Original Link (開啟原圖)</a>
     </div>
 
     <script>
@@ -1758,9 +1770,72 @@
 
         function updatePopupContent(m) { if (m.layer.getPopup()) m.layer.setPopupContent(generatePopupHtml(m)); }
 
-        // --- NEW: Photo Modal Functions ---
+        // --- NEW: Photo Modal Functions (Updated Logic) ---
         function openPhotoModal(url, id) {
-            document.getElementById('photo-modal-img').src = url;
+            var finalUrl = url.trim();
+            var displayUrl = finalUrl; // URL for the <img> tag
+            var originalUrl = finalUrl; // URL for the "Open Original" button
+
+            // Extract Google Drive ID
+            var driveId = null;
+            if (finalUrl.includes('drive.google.com')) {
+                // Pattern 1: /file/d/ID/view
+                var match1 = finalUrl.match(/\/d\/(.+?)\//);
+                if (match1 && match1[1]) {
+                    driveId = match1[1];
+                }
+                // Pattern 2: id=ID
+                else {
+                    var match2 = finalUrl.match(/id=([^&]+)/);
+                    if (match2 && match2[1]) {
+                        driveId = match2[1];
+                    }
+                }
+            }
+
+            if (driveId) {
+                // Use Google User Content Direct Link (The most reliable for embeds)
+                // =s2000 asks for size 2000px
+                displayUrl = `https://lh3.googleusercontent.com/d/${driveId}=s2000`;
+                
+                // Ensure the button opens the viewer
+                originalUrl = `https://drive.google.com/file/d/${driveId}/view?usp=sharing`;
+            } else if (finalUrl.includes('dropbox.com')) {
+                displayUrl = finalUrl.replace('?dl=0', '?raw=1');
+                originalUrl = finalUrl;
+            }
+
+            var img = document.getElementById('photo-modal-img');
+            var originalLinkBtn = document.getElementById('photo-original-link');
+            var errorMsg = document.getElementById('photo-error-msg');
+            var loadingMsg = document.getElementById('photo-loading-msg');
+            
+            // Reset UI State
+            img.style.display = 'none'; // Hide until loaded
+            errorMsg.style.display = 'none';
+            loadingMsg.style.display = 'block';
+            
+            // Security Attributes
+            img.setAttribute('referrerpolicy', 'no-referrer'); 
+            img.setAttribute('crossorigin', 'anonymous'); 
+            
+            img.onload = function() {
+                loadingMsg.style.display = 'none';
+                img.style.display = 'block';
+            };
+            
+            img.onerror = function() {
+                loadingMsg.style.display = 'none';
+                img.style.display = 'none';
+                errorMsg.style.display = 'block';
+            };
+            
+            img.src = displayUrl;
+            
+            if (originalLinkBtn) {
+                originalLinkBtn.href = originalUrl;
+            }
+
             document.getElementById('photo-modal-caption').innerText = "Point ID: " + id;
             document.getElementById('photo-modal-overlay').style.display = 'flex';
         }
