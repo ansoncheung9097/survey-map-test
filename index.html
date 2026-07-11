@@ -719,6 +719,7 @@ legend.innerHTML = `
                    <div class="legend-icon"><span class="legend-dot" style="background:#fd7e14;"></span></div>
                    <div class="legend-text">Partial</div>
 
+                    
                    <div class="legend-icon"><span class="legend-dot" style="background:#007bff;"></span></div>
                    <div class="legend-text">Half Done</div>
 
@@ -894,23 +895,22 @@ statusStr = "Control"; color = "#FF0000";
 } else {
 // Calculate M Status
 var checks = p.mChecks || [];
-var checkCount = checks.filter(c => c === 'v' || c === 'V').length;
+                        var checkCount = checks.filter(c => c === 'v' || c === 'V').length;
+                        var checkCount = checks.filter(c => c === 'v').length;
 var freq = p.freq;
 
 if (freq === 'Daily') {
 var todayIndex = -1;
 if (p.mDates) {
 todayIndex = p.mDates.indexOf(todayStr);
-if (todayIndex === -1) {
-// 容錯機制：如果後端給的是 1-6-2026 或 01-06-2026 格式
-                                     var altDateStr1 = today.getDate() + '-' + (today.getMonth() + 1) + '-' + today.getFullYear();
-                                     var altDateStr2 = ('0'+today.getDate()).slice(-2) + '-' + ('0'+(today.getMonth() + 1)).slice(-2) + '-' + today.getFullYear();
+                                 if (todayIndex === -1) {
+                                     // 容錯機制：如果後端給的是 1-6-2026 或 01-06-2026 格式
                                      var altDateStr1 = today.getFullYear() + '-' + ('0' + (today.getMonth() + 1)).slice(-2) + '-' + ('0' + today.getDate()).slice(-2);
-todayIndex = p.mDates.indexOf(altDateStr1);
-                                     if (todayIndex === -1) todayIndex = p.mDates.indexOf(altDateStr2);
+                                     todayIndex = p.mDates.indexOf(altDateStr1);
+                                 }
 }
-}
-if (todayIndex > -1 && (checks[todayIndex] === 'v' || checks[todayIndex] === 'V')) {
+                             if (todayIndex > -1 && (checks[todayIndex] === 'v' || checks[todayIndex] === 'V')) {
+                             if (todayIndex > -1 && checks[todayIndex] === 'v') {
 statusStr = "Done"; color = "#00e600";
 } else {
 statusStr = "Missing"; color = "red";
@@ -933,20 +933,15 @@ statusStr = "Missing"; color = "red";
 var todayIndex = -1;
 if (p.mDates) {
 todayIndex = p.mDates.indexOf(todayStr);
-                                 if (todayIndex === -1) {
-                                     // 容錯機制：如果後端給的是 1-6-2026 (如圖所示) 或 01-06-2026 格式
-                                     var altDateStr1 = today.getDate() + '-' + (today.getMonth() + 1) + '-' + today.getFullYear();
-                                     var altDateStr2 = ('0'+today.getDate()).slice(-2) + '-' + ('0'+(today.getMonth() + 1)).slice(-2) + '-' + today.getFullYear();
-                                     todayIndex = p.mDates.indexOf(altDateStr1);
-                                     if (todayIndex === -1) todayIndex = p.mDates.indexOf(altDateStr2);
-                                 }
 }
-
+                             
 if (todayIndex > -1) {
 var curCheck = checks[todayIndex];
-if (curCheck === 'v' || curCheck === 'V') {
+                                 if (curCheck === 'v' || curCheck === 'V') {
+                                 if (curCheck === 'v') {
 statusStr = "Done"; color = "#00e600";
-} else if (curCheck === 'o' || curCheck === 'O') {
+                                 } else if (curCheck === 'o' || curCheck === 'O') {
+                                 } else if (curCheck === 'o') {
 statusStr = "Half Done"; color = "#007bff";
 } else {
 statusStr = "Missing"; color = "red";
@@ -1816,19 +1811,20 @@ if(m) {
 if (isMonitoringMode) {
 if (m.freq === 'Twice per day') {
 if (m.status === "Half Done") {
-// 已經是藍色 (Half Done)，第二次點擊要變綠色 (Done) 並回傳 v
+                                // 已經是藍色 (Half Done)，第二次點擊要變綠色 (Done) 並回傳 v
 m.status = "Done"; m.color = "#00e600";
 batchV.push(id);
 } else if (m.status === "Done") {
-// 已經是綠色，重複點擊維持綠色並回傳 v
+                                // 已經是綠色，重複點擊維持綠色並回傳 v
 batchV.push(id);
 } else {
-// 紅色 (Missing) 第一次點擊，變藍色 (Half Done) 並回傳 o
+                                // 紅色 (Missing) 第一次點擊，變藍色 (Half Done) 並回傳 o
 m.status = "Half Done"; m.color = "#007bff";
 batchO.push(id);
 }
 } else {
-m.status = "Done"; m.color = "#00e600"; // Assume done after update
+                            m.status = "Done"; m.color = "#00e600"; // Assume done after update
+                            m.status = "Done"; m.color = "#00e600"; 
 batchV.push(id);
 }
 } else {
@@ -1842,71 +1838,82 @@ updatePopupContent(m);
 renderList(markers);
 
 var requests = [];
-
-// 發送 O 的請求（第一次點擊）
+            
+            // 發送 O 的請求（第一次點擊）
 if (batchO.length > 0) {
-requests.push(
-fetch(API_URL, {
-method: 'POST', 
-body: JSON.stringify({
-action: 'batch_install', 
-sheet: currentSheet, 
-ids: batchO, 
-date: dateStr,
-// 以下三個屬性都放 o，確保後端怎樣都能讀到
-status: 'o',
-val: 'o',
-value: 'o'
-})
-}).then(res => res.text())
-);
+                requests.push(
+                    fetch(API_URL, {
+                        method: 'POST', 
+                        body: JSON.stringify({
+                            action: 'batch_install', 
+                            sheet: currentSheet, 
+                            ids: batchO, 
+                            date: dateStr,
+                            // 以下三個屬性都放 o，確保後端怎樣都能讀到
+                            status: 'o',
+                            val: 'o',
+                            value: 'o'
+                        })
+                    }).then(res => res.text())
+                );
+                requests.push(fetch(API_URL, {
+                    method: 'POST', body: JSON.stringify({action: 'batch_install', sheet: currentSheet, ids: batchO, date: dateStr, val: 'o'})
+                }).then(res => res.text()));
 }
-
-// 發送 V 的請求（第二次點擊）
+            
+            // 發送 V 的請求（第二次點擊）
 if (batchV.length > 0) {
-requests.push(
-fetch(API_URL, {
-method: 'POST', 
-body: JSON.stringify({
-action: 'batch_install', 
-sheet: currentSheet, 
-ids: batchV, 
-date: dateStr,
-status: 'v',
-val: 'v',
-value: 'v'
-})
-}).then(res => res.text())
-);
+                requests.push(
+                    fetch(API_URL, {
+                        method: 'POST', 
+                        body: JSON.stringify({
+                            action: 'batch_install', 
+                            sheet: currentSheet, 
+                            ids: batchV, 
+                            date: dateStr,
+                            status: 'v',
+                            val: 'v',
+                            value: 'v'
+                        })
+                    }).then(res => res.text())
+                );
+                requests.push(fetch(API_URL, {
+                    method: 'POST', body: JSON.stringify({action: 'batch_install', sheet: currentSheet, ids: batchV, date: dateStr, val: 'v'})
+                }).then(res => res.text()));
 }
 
-// 發送安裝 (I_) 請求
+            // 發送安裝 (I_) 請求
 if (batchI.length > 0) {
-requests.push(
-fetch(API_URL, {
-method: 'POST', 
-body: JSON.stringify({
-action: 'batch_install', 
-sheet: currentSheet, 
-ids: batchI, 
-date: dateStr,
-status: 1
-})
-}).then(res => res.text())
-);
+                requests.push(
+                    fetch(API_URL, {
+                        method: 'POST', 
+                        body: JSON.stringify({
+                            action: 'batch_install', 
+                            sheet: currentSheet, 
+                            ids: batchI, 
+                            date: dateStr,
+                            status: 1
+                        })
+                    }).then(res => res.text())
+                );
+                requests.push(fetch(API_URL, {
+                    method: 'POST', body: JSON.stringify({action: 'batch_install', sheet: currentSheet, ids: batchI, date: dateStr})
+                }).then(res => res.text()));
 }
 
 Promise.all(requests).then(responses => {
 var msg = responses[0] || "Update successful";
-alert(msg); 
+                alert(msg); 
+                alert("Update completed"); 
 // Clear selection so UI resets correctly after reload
 clearBatchSelection();
 if(!isMonitoringMode) toggleBatchMode(); 
 reloadMap(); 
-}).catch(err => { 
-alert("Error"); 
-document.getElementById('loading-overlay').style.display = 'none'; 
-});
+            }).catch(err => { 
+                alert("Error"); 
+                document.getElementById('loading-overlay').style.display = 'none'; 
+            });
+            }).catch(err => { alert("Error"); document.getElementById('loading-overlay').style.display = 'none'; });
 }
 
 function openBatchInstallModal() {
