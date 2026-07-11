@@ -3,7 +3,6 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<!-- iOS Fullscreen Support -->
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Survey App">
@@ -13,7 +12,6 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js"></script>
-<!-- Leaflet Rotate Plugin -->
 <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
 
 <style>
@@ -361,7 +359,6 @@ body * { visibility: hidden; }
 <div id="home-screen">
 <div class="app-title">Survey Map App</div>
 <div id="status-subtitle" class="app-subtitle">Connecting...</div>
-<!-- Menu Container -->
 <div id="menu-container"></div>
 <div style="margin-top:20px; color:#ddd; font-size:12px; text-decoration:underline; cursor:pointer;" onclick="resetURL()">Reset Connection</div>
 </div>
@@ -376,7 +373,6 @@ body * { visibility: hidden; }
 </div>
 </div>
 
-<!-- Modals -->
 <div id="update-modal-overlay">
 <div class="modal-box">
 <h3 class="modal-title" id="modal-title">Update Install Date</h3>
@@ -416,7 +412,6 @@ body * { visibility: hidden; }
 </div>
 </div>
 
-<!-- New M_ Batch Input Modal -->
 <div id="batch-input-modal">
 <div class="modal-box">
 <h3 class="modal-title">Batch Update Monitoring</h3>
@@ -439,7 +434,6 @@ body * { visibility: hidden; }
 </div>
 </div>
 
-<!-- New Print Mode Selection Modal -->
 <div id="print-mode-modal">
 <div class="modal-box" style="text-align:center;">
 <h3 class="modal-title">Select Print Mode</h3>
@@ -466,7 +460,6 @@ Current Map View Only
 </div>
 </div>
 
-<!-- Hierarchy Print Report Container -->
 <div id="print-container">
 <button class="print-close-btn" onclick="closePrintView()">Close</button>
 <button class="print-action-btn" onclick="window.print()">Print PDF</button>
@@ -475,12 +468,10 @@ Current Map View Only
 <div id="print-date" style="font-size:12px;color:#666;margin-top:5px;"></div>
 </div>
 <div id="print-content">
-<!-- Hierarchy generated via JS -->
 </div>
 </div>
 
 <div id="map-container">
-<!-- Compass Reset Button -->
 <div id="compass-btn" onclick="resetNorth()">
 <div class="compass-arrow-container">
 <div class="compass-n"></div>
@@ -499,7 +490,6 @@ Current Map View Only
 </div>
 </div>
 
-<!-- Collapsible Button Group -->
 <div class="btn-group-container">
 <button class="btn-float btn-main-toggle" onclick="toggleMenu()" title="Toggle Menu">⚙️</button>
 <div id="expandable-btns" class="btn-expandable">
@@ -544,7 +534,6 @@ Current Map View Only
 </div>
 
 <div id="legend-container" class="legend">
-<!-- Dynamically populated legend -->
 </div>
 </div>
 
@@ -727,8 +716,12 @@ legend.innerHTML = `
                    <div class="legend-text">Done</div>
 
                    <div class="legend-separator"></div>
-                   <div class="legend-icon"><span style="color:red;font-weight:900;font-size:12px;">✖&#xFE0E;</span></div>
+                   <div class="legend-icon"><span style="color:red;font-weight:900;font-size:12px;">✖︎</span></div>
                    <div class="legend-text">Damaged</div>
+
+                   <div class="legend-separator"></div>
+                   <div class="legend-icon"><span class="legend-dot" style="background:yellow;"></span></div>
+                   <div class="legend-text">Terminated</div>
                `;
 } else {
 // I_ Sheet Legend (Default)
@@ -740,8 +733,12 @@ legend.innerHTML = `
                    <div class="legend-text">Installed</div>
                    
                    <div class="legend-separator"></div>
-                   <div class="legend-icon"><span style="color:red;font-weight:900;font-size:12px;">✖&#xFE0E;</span></div>
+                   <div class="legend-icon"><span style="color:red;font-weight:900;font-size:12px;">✖︎</span></div>
                    <div class="legend-text">Damaged</div>
+                   
+                   <div class="legend-separator"></div>
+                   <div class="legend-icon"><span class="legend-dot" style="background:yellow;"></span></div>
+                   <div class="legend-text">Terminated</div>
                    
                    <div class="legend-separator"></div>
                    <div class="legend-icon"><span class="legend-dot" style="background:transparent; border: 2px dashed black;"></span></div>
@@ -882,81 +879,81 @@ bounds.extend([lat, lng]);
 
 var isControl = controlTypes.has(p.t);
 var isDamaged = p.dmg === true;
+var isTerminated = p.term === true; 
 
 var color = colorNotInstalled; 
 var statusStr = "Not Installed";
 
 // --- NEW LOGIC FOR MONITORING SHEETS (M_) ---
 if (isMonitoringMode) {
-if (isDamaged) {
-statusStr = "Damaged"; color = "red";
-} else if (isControl) {
-statusStr = "Control"; color = "#FF0000";
-} else {
-// Calculate M Status
-var checks = p.mChecks || [];
-                        var checkCount = checks.filter(c => c === 'v' || c === 'V').length;
-                        var checkCount = checks.filter(c => c === 'v').length;
-var freq = p.freq;
+    if (isDamaged) {
+        statusStr = "Damaged"; color = "red";
+    } else if (isTerminated) {
+        statusStr = "Terminated"; color = "yellow";
+    } else if (isControl) {
+        statusStr = "Control"; color = "#FF0000";
+    } else {
+        // Calculate M Status
+        var checks = p.mChecks || [];
+        var checkCount = checks.filter(c => c === 'v' || c === 'V').length;
+        var freq = p.freq;
 
-if (freq === 'Daily') {
-var todayIndex = -1;
-if (p.mDates) {
-todayIndex = p.mDates.indexOf(todayStr);
-                                 if (todayIndex === -1) {
-                                     // 容錯機制：如果後端給的是 1-6-2026 或 01-06-2026 格式
-                                     var altDateStr1 = today.getFullYear() + '-' + ('0' + (today.getMonth() + 1)).slice(-2) + '-' + ('0' + today.getDate()).slice(-2);
-                                     todayIndex = p.mDates.indexOf(altDateStr1);
-                                 }
-}
-                             if (todayIndex > -1 && (checks[todayIndex] === 'v' || checks[todayIndex] === 'V')) {
-                             if (todayIndex > -1 && checks[todayIndex] === 'v') {
-statusStr = "Done"; color = "#00e600";
-} else {
-statusStr = "Missing"; color = "red";
-}
-} else if (freq === 'Twice a week') {
-if (checkCount >= 2) {
-statusStr = "Done"; color = "#00e600";
-} else if (checkCount === 1) {
-statusStr = "Partial"; color = "#fd7e14"; 
-} else {
-statusStr = "Missing"; color = "red";
-}
-} else if (freq === 'Weekly') {
-if (checkCount >= 1) {
-statusStr = "Done"; color = "#00e600";
-} else {
-statusStr = "Missing"; color = "red";
-}
-} else if (freq === 'Twice per day') {
-var todayIndex = -1;
-if (p.mDates) {
-todayIndex = p.mDates.indexOf(todayStr);
-}
+        if (freq === 'Daily') {
+            var todayIndex = -1;
+            if (p.mDates) {
+                todayIndex = p.mDates.indexOf(todayStr);
+                if (todayIndex === -1) {
+                    // 容錯機制：如果後端給的是 1-6-2026 或 01-06-2026 格式
+                    var altDateStr1 = today.getFullYear() + '-' + ('0' + (today.getMonth() + 1)).slice(-2) + '-' + ('0' + today.getDate()).slice(-2);
+                    todayIndex = p.mDates.indexOf(altDateStr1);
+                }
+            }
+            if (todayIndex > -1 && (checks[todayIndex] === 'v' || checks[todayIndex] === 'V')) {
+                statusStr = "Done"; color = "#00e600";
+            } else {
+                statusStr = "Missing"; color = "red";
+            }
+        } else if (freq === 'Twice a week') {
+            if (checkCount >= 2) {
+                statusStr = "Done"; color = "#00e600";
+            } else if (checkCount === 1) {
+                statusStr = "Partial"; color = "#fd7e14"; 
+            } else {
+                statusStr = "Missing"; color = "red";
+            }
+        } else if (freq === 'Weekly') {
+            if (checkCount >= 1) {
+                statusStr = "Done"; color = "#00e600";
+            } else {
+                statusStr = "Missing"; color = "red";
+            }
+        } else if (freq === 'Twice per day') {
+            var todayIndex = -1;
+            if (p.mDates) {
+                todayIndex = p.mDates.indexOf(todayStr);
+            }
                              
-if (todayIndex > -1) {
-var curCheck = checks[todayIndex];
-                                 if (curCheck === 'v' || curCheck === 'V') {
-                                 if (curCheck === 'v') {
-statusStr = "Done"; color = "#00e600";
-                                 } else if (curCheck === 'o' || curCheck === 'O') {
-                                 } else if (curCheck === 'o') {
-statusStr = "Half Done"; color = "#007bff";
-} else {
-statusStr = "Missing"; color = "red";
-}
-} else {
-statusStr = "Missing"; color = "red";
-}
-} else {
-statusStr = "Missing"; color = "red";
-}
-}
+            if (todayIndex > -1) {
+                var curCheck = checks[todayIndex];
+                if (curCheck === 'v' || curCheck === 'V') {
+                    statusStr = "Done"; color = "#00e600";
+                } else if (curCheck === 'o' || curCheck === 'O') {
+                    statusStr = "Half Done"; color = "#007bff";
+                } else {
+                    statusStr = "Missing"; color = "red";
+                }
+            } else {
+                statusStr = "Missing"; color = "red";
+            }
+        } else {
+            statusStr = "Missing"; color = "red";
+        }
+    }
 } 
 // --- SIMPLIFIED LOGIC FOR I_ SHEETS ---
 else {
 if (isDamaged) { statusStr = "Damaged"; color = "red"; }
+else if (isTerminated) { statusStr = "Terminated"; color = "yellow"; }
 else if (isControl) { statusStr = "Control"; color = "#FF0000"; }
 else {
 if (hasInstallDate) { color = colorInstalled; statusStr = "Installed"; }
@@ -965,7 +962,7 @@ if (hasInstallDate) { color = colorInstalled; statusStr = "Installed"; }
 
 var marker;
 if (isDamaged) {
-var xIcon = L.divIcon({ className: 'damaged-icon', html: '✖&#xFE0E;', iconSize: [16, 16], iconAnchor: [8, 8] });
+var xIcon = L.divIcon({ className: 'damaged-icon', html: '✖︎', iconSize: [16, 16], iconAnchor: [8, 8] });
 marker = L.marker([lat, lng], { icon: xIcon });
 }
 else if (isControl) {
@@ -1010,6 +1007,7 @@ type: String(p.t||"Other"),
 status: statusStr,
 isControl: isControl,
 isDamaged: isDamaged,
+isTerminated: isTerminated,
 color: color,
 layer: marker,
 installDate: p.d || '-', initDate: p.init || '-', 
@@ -1206,9 +1204,9 @@ freqEl.style.display = 'none';
 // Dynamic Status List
 var sSet;
 if (isMonitoringMode) {
-sSet = new Set(['Missing', 'Partial', 'Half Done', 'Done', 'Damaged']);
+sSet = new Set(['Missing', 'Partial', 'Half Done', 'Done', 'Damaged', 'Terminated']);
 } else {
-sSet = new Set(['Not Installed', 'Installed', 'Damaged']); 
+sSet = new Set(['Not Installed', 'Installed', 'Damaged', 'Terminated']); 
 }
 populate(sSet, 'status', 'Status'); 
 }
@@ -1362,7 +1360,8 @@ addedCount++;
 
 function isEligibleForSelection(m) {
 if (isMonitoringMode) {
-if (m.status !== "Done" && m.status !== "Damaged") return true;
+// Exclude Terminated from batch updates
+if (m.status !== "Done" && m.status !== "Damaged" && m.status !== "Terminated") return true;
 } else {
 if (m.status === "Not Installed") return true;
 }
@@ -1722,7 +1721,7 @@ closeInitialModal();
 }
 
 function generatePopupHtml(m) {
-var navLink = `<a href="https://www.google.com/maps/dir/?api=1&destination=${m.lat},${m.lng}" target="_blank" title="Navigate" style="text-decoration:none; font-size:16px; margin-left: 8px;">🚀</a>`;
+var navLink = `<a href="http://googleusercontent.com/maps.google.com/${m.lat},${m.lng}" target="_blank" title="Navigate" style="text-decoration:none; font-size:16px; margin-left: 8px;">🚀</a>`;
 var content = `<div style="font-weight:bold;font-size:16px; display: flex; align-items: center;">${m.id}${navLink}</div><div style="font-size:13px;color:#555;">Code: <b>${m.code || '-'}</b></div><div style="font-size:12px;color:#555;">N: ${m.n} | E: ${m.e}</div><div style="font-size:12px;color:#555;">Zone: ${m.zone} | Type: ${m.type}</div>`;
 if (m.isAsBuilt) content += `<div style="color:blue; text-shadow: 1px 1px 0 #00FF00; font-weight:bold; font-size:12px;">(As-built Pos.)</div>`;
 if (m.freq && m.freq !== "None") content += `<div style="font-size:12px;color:#007bff;">Freq: <b>${m.freq}</b></div>`;
@@ -1823,7 +1822,6 @@ m.status = "Half Done"; m.color = "#007bff";
 batchO.push(id);
 }
 } else {
-                            m.status = "Done"; m.color = "#00e600"; // Assume done after update
                             m.status = "Done"; m.color = "#00e600"; 
 batchV.push(id);
 }
@@ -1856,9 +1854,6 @@ if (batchO.length > 0) {
                         })
                     }).then(res => res.text())
                 );
-                requests.push(fetch(API_URL, {
-                    method: 'POST', body: JSON.stringify({action: 'batch_install', sheet: currentSheet, ids: batchO, date: dateStr, val: 'o'})
-                }).then(res => res.text()));
 }
             
             // 發送 V 的請求（第二次點擊）
@@ -1877,9 +1872,6 @@ if (batchV.length > 0) {
                         })
                     }).then(res => res.text())
                 );
-                requests.push(fetch(API_URL, {
-                    method: 'POST', body: JSON.stringify({action: 'batch_install', sheet: currentSheet, ids: batchV, date: dateStr, val: 'v'})
-                }).then(res => res.text()));
 }
 
             // 發送安裝 (I_) 請求
@@ -1896,9 +1888,6 @@ if (batchI.length > 0) {
                         })
                     }).then(res => res.text())
                 );
-                requests.push(fetch(API_URL, {
-                    method: 'POST', body: JSON.stringify({action: 'batch_install', sheet: currentSheet, ids: batchI, date: dateStr})
-                }).then(res => res.text()));
 }
 
 Promise.all(requests).then(responses => {
@@ -1913,7 +1902,6 @@ reloadMap();
                 alert("Error"); 
                 document.getElementById('loading-overlay').style.display = 'none'; 
             });
-            }).catch(err => { alert("Error"); document.getElementById('loading-overlay').style.display = 'none'; });
 }
 
 function openBatchInstallModal() {
