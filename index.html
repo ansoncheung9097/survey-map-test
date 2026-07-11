@@ -843,6 +843,11 @@ var day = ('0' + today.getDate()).slice(-2);
 var todayStr = year + '-' + month + '-' + day;
 
 data.forEach(p => {
+// --- 修正1：徹底清除 freq 的多餘隱藏空白 ---
+if (typeof p.freq === 'string') {
+    p.freq = p.freq.trim();
+}
+
 // Calculate dates for filter logic
 var hasInstallDate = (p.d && p.d.trim() !== "" && p.d !== "-");
 var hasInitDate = (p.init && p.init.trim() !== "" && p.init !== "-");
@@ -895,6 +900,8 @@ if (isMonitoringMode) {
     } else {
         // Calculate M Status
         var checks = p.mChecks || [];
+        
+        // --- 修正2：刪除重複且錯誤的 filter 判斷 ---
         var checkCount = checks.filter(c => c === 'v' || c === 'V').length;
         var freq = p.freq;
 
@@ -903,7 +910,6 @@ if (isMonitoringMode) {
             if (p.mDates) {
                 todayIndex = p.mDates.indexOf(todayStr);
                 if (todayIndex === -1) {
-                    // 容錯機制：如果後端給的是 1-6-2026 或 01-06-2026 格式
                     var altDateStr1 = today.getFullYear() + '-' + ('0' + (today.getMonth() + 1)).slice(-2) + '-' + ('0' + today.getDate()).slice(-2);
                     todayIndex = p.mDates.indexOf(altDateStr1);
                 }
@@ -933,6 +939,7 @@ if (isMonitoringMode) {
                 todayIndex = p.mDates.indexOf(todayStr);
             }
                              
+            // --- 修正3：整理錯亂的 if-else 邏輯迴圈 ---
             if (todayIndex > -1) {
                 var curCheck = checks[todayIndex];
                 if (curCheck === 'v' || curCheck === 'V') {
@@ -1808,26 +1815,30 @@ ids.forEach(id => {
 var m = markers.find(x=>x.id===id);
 if(m) {
 if (isMonitoringMode) {
-if (m.freq === 'Twice per day') {
-if (m.status === "Half Done") {
-                                // 已經是藍色 (Half Done)，第二次點擊要變綠色 (Done) 並回傳 v
-m.status = "Done"; m.color = "#00e600";
-batchV.push(id);
-} else if (m.status === "Done") {
-                                // 已經是綠色，重複點擊維持綠色並回傳 v
-batchV.push(id);
+    
+    // --- 修正4：確保 Twice per day 不受隱藏空白影響 ---
+    var isTwicePerDay = (m.freq && m.freq.trim().toLowerCase() === 'twice per day');
+    
+    if (isTwicePerDay) {
+        if (m.status === "Half Done") {
+            // 已經是藍色 (Half Done)，第二次點擊要變綠色 (Done) 並回傳 v
+            m.status = "Done"; m.color = "#00e600";
+            batchV.push(id);
+        } else if (m.status === "Done") {
+            // 已經是綠色，重複點擊維持綠色並回傳 v
+            batchV.push(id);
+        } else {
+            // 紅色 (Missing) 第一次點擊，變藍色 (Half Done) 並回傳 o
+            m.status = "Half Done"; m.color = "#007bff";
+            batchO.push(id);
+        }
+    } else {
+        m.status = "Done"; m.color = "#00e600"; 
+        batchV.push(id);
+    }
 } else {
-                                // 紅色 (Missing) 第一次點擊，變藍色 (Half Done) 並回傳 o
-m.status = "Half Done"; m.color = "#007bff";
-batchO.push(id);
-}
-} else {
-                            m.status = "Done"; m.color = "#00e600"; 
-batchV.push(id);
-}
-} else {
-m.status = "Installed"; m.color = colorInstalled; m.installDate = dateStr;
-batchI.push(id);
+    m.status = "Installed"; m.color = colorInstalled; m.installDate = dateStr;
+    batchI.push(id);
 }
 if(m.layer.setStyle) m.layer.setStyle({fillColor:m.color});
 updatePopupContent(m);
@@ -1837,57 +1848,57 @@ renderList(markers);
 
 var requests = [];
             
-            // 發送 O 的請求（第一次點擊）
+// 發送 O 的請求（第一次點擊）
 if (batchO.length > 0) {
-                requests.push(
-                    fetch(API_URL, {
-                        method: 'POST', 
-                        body: JSON.stringify({
-                            action: 'batch_install', 
-                            sheet: currentSheet, 
-                            ids: batchO, 
-                            date: dateStr,
-                            // 以下三個屬性都放 o，確保後端怎樣都能讀到
-                            status: 'o',
-                            val: 'o',
-                            value: 'o'
-                        })
-                    }).then(res => res.text())
-                );
+    requests.push(
+        fetch(API_URL, {
+            method: 'POST', 
+            body: JSON.stringify({
+                action: 'batch_install', 
+                sheet: currentSheet, 
+                ids: batchO, 
+                date: dateStr,
+                // 以下三個屬性都放 o，確保後端怎樣都能讀到
+                status: 'o',
+                val: 'o',
+                value: 'o'
+            })
+        }).then(res => res.text())
+    );
 }
             
-            // 發送 V 的請求（第二次點擊）
+// 發送 V 的請求（第二次點擊）
 if (batchV.length > 0) {
-                requests.push(
-                    fetch(API_URL, {
-                        method: 'POST', 
-                        body: JSON.stringify({
-                            action: 'batch_install', 
-                            sheet: currentSheet, 
-                            ids: batchV, 
-                            date: dateStr,
-                            status: 'v',
-                            val: 'v',
-                            value: 'v'
-                        })
-                    }).then(res => res.text())
-                );
+    requests.push(
+        fetch(API_URL, {
+            method: 'POST', 
+            body: JSON.stringify({
+                action: 'batch_install', 
+                sheet: currentSheet, 
+                ids: batchV, 
+                date: dateStr,
+                status: 'v',
+                val: 'v',
+                value: 'v'
+            })
+        }).then(res => res.text())
+    );
 }
 
-            // 發送安裝 (I_) 請求
+// 發送安裝 (I_) 請求
 if (batchI.length > 0) {
-                requests.push(
-                    fetch(API_URL, {
-                        method: 'POST', 
-                        body: JSON.stringify({
-                            action: 'batch_install', 
-                            sheet: currentSheet, 
-                            ids: batchI, 
-                            date: dateStr,
-                            status: 1
-                        })
-                    }).then(res => res.text())
-                );
+    requests.push(
+        fetch(API_URL, {
+            method: 'POST', 
+            body: JSON.stringify({
+                action: 'batch_install', 
+                sheet: currentSheet, 
+                ids: batchI, 
+                date: dateStr,
+                status: 1
+            })
+        }).then(res => res.text())
+    );
 }
 
 Promise.all(requests).then(responses => {
