@@ -1728,7 +1728,7 @@ closeInitialModal();
 }
 
 function generatePopupHtml(m) {
-var navLink = `<a href="http://googleusercontent.com/maps.google.com/${m.lat},${m.lng}" target="_blank" title="Navigate" style="text-decoration:none; font-size:16px; margin-left: 8px;">🚀</a>`;
+var navLink = `<a href="https://maps.google.com/?q=${m.lat},${m.lng}" target="_blank" title="Navigate" style="text-decoration:none; font-size:16px; margin-left: 8px;">🚀</a>`;
 var content = `<div style="font-weight:bold;font-size:16px; display: flex; align-items: center;">${m.id}${navLink}</div><div style="font-size:13px;color:#555;">Code: <b>${m.code || '-'}</b></div><div style="font-size:12px;color:#555;">N: ${m.n} | E: ${m.e}</div><div style="font-size:12px;color:#555;">Zone: ${m.zone} | Type: ${m.type}</div>`;
 if (m.isAsBuilt) content += `<div style="color:blue; text-shadow: 1px 1px 0 #00FF00; font-weight:bold; font-size:12px;">(As-built Pos.)</div>`;
 if (m.freq && m.freq !== "None") content += `<div style="font-size:12px;color:#007bff;">Freq: <b>${m.freq}</b></div>`;
