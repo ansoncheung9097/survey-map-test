@@ -54,7 +54,7 @@ position: absolute; top: 4px;
 width: 0; height: 0;
 border-left: 5px solid transparent; border-right: 5px solid transparent;
 border-top: 16px solid #8e8e93; /* Grey South */
-position: absolute; bottom: 4px;
+position: absolute bottom: 4px;
 }
 
 /* User Location Marker */
@@ -843,7 +843,6 @@ var day = ('0' + today.getDate()).slice(-2);
 var todayStr = year + '-' + month + '-' + day;
 
 data.forEach(p => {
-// --- 修正1：徹底清除 freq 的多餘隱藏空白 ---
 if (typeof p.freq === 'string') {
     p.freq = p.freq.trim();
 }
@@ -898,10 +897,7 @@ if (isMonitoringMode) {
     } else if (isControl) {
         statusStr = "Control"; color = "#FF0000";
     } else {
-        // Calculate M Status
         var checks = p.mChecks || [];
-        
-        // --- 修正2：刪除重複且錯誤的 filter 判斷 ---
         var checkCount = checks.filter(c => c === 'v' || c === 'V').length;
         var freq = p.freq;
 
@@ -939,7 +935,6 @@ if (isMonitoringMode) {
                 todayIndex = p.mDates.indexOf(todayStr);
             }
                              
-            // --- 修正3：整理錯亂的 if-else 邏輯迴圈 ---
             if (todayIndex > -1) {
                 var curCheck = checks[todayIndex];
                 if (curCheck === 'v' || curCheck === 'V') {
@@ -1816,7 +1811,7 @@ var m = markers.find(x=>x.id===id);
 if(m) {
 if (isMonitoringMode) {
     
-    // --- 修正4：確保 Twice per day 不受隱藏空白影響 ---
+    // 確保 Twice per day 不受隱藏空白影響
     var isTwicePerDay = (m.freq && m.freq.trim().toLowerCase() === 'twice per day');
     
     if (isTwicePerDay) {
@@ -1902,8 +1897,6 @@ if (batchI.length > 0) {
 }
 
 Promise.all(requests).then(responses => {
-var msg = responses[0] || "Update successful";
-                alert(msg); 
                 alert("Update completed"); 
 // Clear selection so UI resets correctly after reload
 clearBatchSelection();
